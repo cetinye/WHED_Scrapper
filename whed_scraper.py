@@ -21,6 +21,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 from selenium.webdriver.chrome.options import Options
 
+from whed_excel_export import export_txt_directory_to_excel
+
 
 BASE_URL = "https://www.whed.net/"
 HOME_URL = urljoin(BASE_URL, "home.php")
@@ -598,6 +600,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.75,
         help="Seconds to wait between detail-page HTTP requests.",
     )
+    parser.add_argument(
+        "--excel-file",
+        help="If provided, export the TXT files in Data into this Excel workbook after scraping.",
+    )
     return parser
 
 
@@ -615,6 +621,12 @@ def main() -> int:
 
     try:
         scraper.run()
+        if args.excel_file:
+            count = export_txt_directory_to_excel(Path(args.data_dir), Path(args.excel_file))
+            print(
+                f"[excel] Exported {count} TXT file(s) to {Path(args.excel_file).resolve()}",
+                flush=True,
+            )
         return 0
     except KeyboardInterrupt:
         print("\n[stop] Interrupted by user.", flush=True)
