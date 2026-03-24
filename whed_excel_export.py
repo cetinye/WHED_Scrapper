@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 from typing import Dict, Iterable, List
 
@@ -136,6 +137,7 @@ OUTPUT_COLUMNS = [
     "Staff Full Time Total",
     "Staff Part Time Total",
     "Bachelor's Degree",
+    "Bachelor Fields of Study",
     "ISCED-F",
     "Master's Degree",
     "Doctor's Degree",
@@ -198,7 +200,12 @@ DEGREE_PATTERNS = {
     "Master's Degree": (
         "master",
         "magister",
+        "magistr",
         "maestr",
+        "maitris",
+        "mestre",
+        "mestrado",
+        "mastere",
         "msc",
         "mba",
         "graduate",
@@ -206,6 +213,9 @@ DEGREE_PATTERNS = {
     "Doctor's Degree": (
         "doctor",
         "doktor",
+        "doutor",
+        "doutorado",
+        "lekarz",
         "doctorat",
         "doctorado",
         "doctorate",
@@ -217,6 +227,11 @@ DEGREE_PATTERNS = {
         "certificate",
         "certificat",
         "sertifika",
+        "associate degree",
+        "podyplom",
+        "swiadectwo",
+        "abschlussprufung",
+        "konzertexamen",
         "post-bachelor",
         "post bachelor",
     ),
@@ -230,9 +245,100 @@ DEGREE_NON_SUBJECT_LABELS = {
     "remark",
 }
 
+DEGREE_SUBJECT_COLUMN_MAP = {
+    "Bachelor's Degree": "Bachelor Fields of Study",
+}
+
+EMBEDDED_DEGREE_FIELDS_RE = re.compile(
+    r"(?P<heading>"
+    r"(?:Associate Degree"
+    r"|Bachelor[^:]{0,80}"
+    r"|Licenc\w*[^:]{0,40}"
+    r"|Bakalavr[^:]{0,80}"
+    r"|Master[^:]{0,80}"
+    r"|Mast(?:ere|er)[^:]{0,80}"
+    r"|Magistr[^:]{0,80}"
+    r"|Doctor[^:]{0,80}"
+    r"|PhD[^:]{0,40}"
+    r"|Diplom[^:]{0,80}"
+    r"|Diploma[^:]{0,80}"
+    r"|Certificate[^:]{0,80}"
+    r"|Kirchliche Abschlussprufung[^:]{0,80}"
+    r"|Kunstlerische Abschlussprufung[^:]{0,80}"
+    r"|Abschlussprufung[^:]{0,80}"
+    r"|Konzertexamen[^:]{0,80}"
+    r"|Swiadectwo[^:]{0,120}"
+    r"|Podyplom[^:]{0,80}"
+    r"|Lekarz[^:]{0,80}"
+    r"|Habilitation[^:]{0,80}"
+    r"|Lizentiat[^:]{0,80})"
+    r")\s+Fields of study:\s*",
+    flags=re.IGNORECASE,
+)
+
 
 def normalize_space(value: str) -> str:
     return MULTISPACE_RE.sub(" ", value or "").strip()
+
+
+def ascii_fold(value: str) -> str:
+    return "".join(
+        char
+        for char in unicodedata.normalize("NFKD", value or "")
+        if not unicodedata.combining(char)
+    )
+
+
+def degree_subject_column(column_name: str) -> str:
+    return DEGREE_SUBJECT_COLUMN_MAP.get(column_name, column_name)
+
+
+def degree_heading_label(line: str) -> str:
+    clean = normalize_space(line)
+    if "Fields of study:" in clean:
+        clean = clean.split("Fields of study:", 1)[0]
+    return normalize_space(clean).strip(" ,;:-")
+
+
+def split_embedded_degree_fields(value: str) -> List[tuple[str, str]]:
+    normalized_value = normalize_space(value)
+    if not normalized_value:
+        return []
+
+    folded_value = ascii_fold(normalized_value)
+    matches = list(EMBEDDED_DEGREE_FIELDS_RE.finditer(folded_value))
+    if not matches:
+        return [("", normalized_value)]
+
+    segments: List[tuple[str, str]] = []
+    leading = normalize_space(normalized_value[: matches[0].start()]).strip(" ,;:-")
+    if leading:
+        segments.append(("", leading))
+
+    marker = "Fields of study:"
+    for index, match in enumerate(matches):
+        heading = normalize_space(normalized_value[match.start() : match.end()])
+        if marker in heading:
+            heading = normalize_space(heading.split(marker, 1)[0])
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(normalized_value)
+        content = normalize_space(normalized_value[start:end]).strip(" ,;:-")
+        if content:
+            segments.append((heading, content))
+
+    return segments
+
+
+def append_degree_subjects(record: Dict[str, str], degree_column: str, value: str) -> None:
+    for heading, content in split_embedded_degree_fields(value):
+        target_column = degree_column
+        if heading:
+            target_column = categorize_degree(heading) or degree_column
+            if target_column == "Bachelor's Degree":
+                label = degree_heading_label(heading)
+                if label:
+                    append_value(record, target_column, label)
+        append_subject_values(record, degree_subject_column(target_column), content)
 
 
 def is_allowed_country(country: str) -> bool:
@@ -436,7 +542,7 @@ def parse_student_staff(lines: List[str], record: Dict[str, str]) -> None:
 
 
 def categorize_degree(title: str) -> str:
-    lowered = title.casefold()
+    lowered = ascii_fold(title).casefold()
     for column, patterns in DEGREE_PATTERNS.items():
         if any(pattern in lowered for pattern in patterns):
             return column
@@ -448,20 +554,58 @@ def is_degree_heading(line: str) -> bool:
     if not normalized or normalized.endswith(":"):
         return False
 
+    folded = ascii_fold(normalized)
+
+    if re.search(r"\((?:professional\s+)?bachelor[^)]*degree\)", folded, flags=re.IGNORECASE):
+        return True
+
+    if re.search(r"\((?:master[^)]*degree)\)", folded, flags=re.IGNORECASE):
+        return True
+
+    if re.search(r"\((?:doctor[^)]*degree|phd degree)\)", folded, flags=re.IGNORECASE):
+        return True
+
+    if "fields of study:" in folded.casefold() and any(
+        cue in folded.casefold()
+        for cue in (
+            "associate degree",
+            "bachelor",
+            "master",
+            "magistr",
+            "doctor",
+            "phd",
+            "diplom",
+            "certificate",
+            "lekarz",
+            "swiadectwo",
+            "podyplom",
+            "abschlussprufung",
+            "konzertexamen",
+        )
+    ):
+        return True
+
     return bool(
         re.match(
-            r"^(bachelor|master|doctor|doktor|ph\.?d|diplom|diploma|certificate|certificat|"
-            r"post-bachelor|also diploma|licenc|licence|licenciat|bacharel|bakalavr|"
+            r"^(bachelor|master|mestre|mestrado|maitris|magistr|doctor|doktor|doutor|doutorado|ph\.?d|diplom|diploma|certificate|certificat|"
+            r"post-bachelor|also diploma|licenc|licence|licenciat|bacharel|bakalavr|associate degree|lekarz|swiadectwo|podyplom|abschlussprufung|konzertexamen|"
             r"undergraduate|graduate|magister|maestr)",
-            normalized,
+            folded,
             flags=re.IGNORECASE,
         )
     )
 
 
 def extract_inline_degree_subjects(title: str) -> str:
-    cleaned = normalize_space(title)
+    cleaned = normalize_space(ascii_fold(title))
     patterns = [
+        r"^.+\((?:professional\s+)?bachelor[^)]*degree\)\s+Fields of study:\s+(.+)$",
+        r"^.+\((?:master[^)]*degree)\)\s+Fields of study:\s+(.+)$",
+        r"^.+\((?:doctor[^)]*degree|phd degree)\)\s+Fields of study:\s+(.+)$",
+        r"^.+\bassociate degree\b\s+Fields of study:\s+(.+)$",
+        r"^.+\b(?:swiadectwo|podyplom)\b.+\s+Fields of study:\s+(.+)$",
+        r"^.+\b(?:abschlussprufung|konzertexamen)\b.+\s+Fields of study:\s+(.+)$",
+        r"^.+\blekarz\b\s+Fields of study:\s+(.+)$",
         r"^(?:Also\s+)?Diploma(?:/Certificate)?(?:\s+in)?\s+(.+)$",
         r"^(?:Post-bachelor'?s\s+)?Diploma/Certificate(?:\s+in)?\s+(.+)$",
         r"^Doctor of\s+(.+)$",
@@ -484,7 +628,7 @@ def parse_degrees(lines: List[str], record: Dict[str, str]) -> None:
     def flush_pending() -> None:
         nonlocal pending_label, pending_buffer
         if current_column and pending_label.casefold() == "fields of study" and pending_buffer:
-            append_subject_values(record, current_column, " ".join(pending_buffer))
+            append_degree_subjects(record, current_column, " ".join(pending_buffer))
         pending_label = ""
         pending_buffer = []
 
@@ -505,9 +649,13 @@ def parse_degrees(lines: List[str], record: Dict[str, str]) -> None:
         if degree_column:
             flush_pending()
             current_column = degree_column
+            if degree_column == "Bachelor's Degree":
+                label = degree_heading_label(line)
+                if label:
+                    append_value(record, degree_column, label)
             inline_subjects = extract_inline_degree_subjects(line)
             if inline_subjects:
-                append_subject_values(record, current_column, inline_subjects)
+                append_degree_subjects(record, current_column, inline_subjects)
             continue
 
         key, value = split_key_value(line)
@@ -515,7 +663,7 @@ def parse_degrees(lines: List[str], record: Dict[str, str]) -> None:
             flush_pending()
             if current_column and key.casefold() == "fields of study":
                 if value:
-                    append_subject_values(record, current_column, value)
+                    append_degree_subjects(record, current_column, value)
                 else:
                     pending_label = key
             continue
@@ -627,7 +775,7 @@ def parse_txt_file(path: Path) -> Dict[str, str]:
     parse_general_information(sections["General Information"], record)
     parse_student_staff(sections["Student & Staff Numbers"], record)
     parse_degrees(sections["Degrees"], record)
-    record["ISCED-F"] = classify_bachelors_cell(record.get("Bachelor's Degree", ""))
+    record["ISCED-F"] = classify_bachelors_cell(record.get("Bachelor Fields of Study", ""))
 
     for title in SECTION_TITLES:
         record[title] = "\n".join(sections[title]).strip()
@@ -663,6 +811,7 @@ def autofit_worksheet(worksheet) -> None:
         "Native Name": 34,
         "Street": 28,
         "Website": 28,
+        "Bachelor Fields of Study": 36,
         "General Information": 40,
         "Divisions": 40,
         "Degrees": 40,
@@ -709,7 +858,7 @@ def export_txt_directory_to_excel(input_dir: Path, output_file: Path) -> int:
         record = parse_txt_file(txt_file)
         if not is_allowed_country(record.get("Country", "")):
             continue
-        bachelor_programs.update(split_bachelor_programs(record.get("Bachelor's Degree", "")))
+        bachelor_programs.update(split_bachelor_programs(record.get("Bachelor Fields of Study", "")))
         sheet.append([record.get(column, "") for column in OUTPUT_COLUMNS])
 
     for row in sheet.iter_rows(min_row=2):
