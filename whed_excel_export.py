@@ -24,6 +24,91 @@ SECTION_SET = set(SECTION_TITLES)
 IAU_ID_RE = re.compile(r"IAU-\d+")
 MULTISPACE_RE = re.compile(r"\s+")
 
+ALLOWED_EXACT_COUNTRIES = {
+    "Austria",
+    "Belgium",
+    "Bulgaria",
+    "Canada",
+    "Croatia",
+    "Cyprus",
+    "Czechia",
+    "Denmark",
+    "Estonia",
+    "Finland",
+    "France",
+    "Germany",
+    "Greece",
+    "Hungary",
+    "Ireland",
+    "Italy",
+    "Latvia",
+    "Lithuania",
+    "Luxembourg",
+    "Malta",
+    "Netherlands",
+    "Poland",
+    "Portugal",
+    "Romania",
+    "Slovak Republic",
+    "Slovenia",
+    "Spain",
+    "Sweden",
+}
+
+ALLOWED_US_JURISDICTIONS = {
+    "Alabama",
+    "Alaska",
+    "Arizona",
+    "Arkansas",
+    "California",
+    "Colorado",
+    "Connecticut",
+    "Delaware",
+    "District of Columbia",
+    "Florida",
+    "Georgia",
+    "Hawaii",
+    "Idaho",
+    "Illinois",
+    "Indiana",
+    "Iowa",
+    "Kansas",
+    "Kentucky",
+    "Louisiana",
+    "Maine",
+    "Maryland",
+    "Massachusetts",
+    "Michigan",
+    "Minnesota",
+    "Mississippi",
+    "Missouri",
+    "Montana",
+    "Nebraska",
+    "Nevada",
+    "New Hampshire",
+    "New Jersey",
+    "New Mexico",
+    "New York",
+    "North Carolina",
+    "North Dakota",
+    "Ohio",
+    "Oklahoma",
+    "Oregon",
+    "Pennsylvania",
+    "Rhode Island",
+    "South Carolina",
+    "South Dakota",
+    "Tennessee",
+    "Texas",
+    "Utah",
+    "Vermont",
+    "Virginia",
+    "Washington",
+    "West Virginia",
+    "Wisconsin",
+    "Wyoming",
+}
+
 OUTPUT_COLUMNS = [
     "Whed Link",
     "University Name",
@@ -148,6 +233,27 @@ DEGREE_NON_SUBJECT_LABELS = {
 
 def normalize_space(value: str) -> str:
     return MULTISPACE_RE.sub(" ", value or "").strip()
+
+
+def is_allowed_country(country: str) -> bool:
+    country = normalize_space(country)
+    if not country:
+        return False
+
+    if country in ALLOWED_EXACT_COUNTRIES:
+        return True
+
+    if country.startswith("Canada -"):
+        return True
+
+    if country.startswith("Belgium -"):
+        return True
+
+    if country.startswith("United States of America - "):
+        jurisdiction = country.removeprefix("United States of America - ").strip()
+        return jurisdiction in ALLOWED_US_JURISDICTIONS
+
+    return False
 
 
 def append_value(record: Dict[str, str], key: str, value: str) -> None:
@@ -601,6 +707,8 @@ def export_txt_directory_to_excel(input_dir: Path, output_file: Path) -> int:
 
     for txt_file in txt_files:
         record = parse_txt_file(txt_file)
+        if not is_allowed_country(record.get("Country", "")):
+            continue
         bachelor_programs.update(split_bachelor_programs(record.get("Bachelor's Degree", "")))
         sheet.append([record.get(column, "") for column in OUTPUT_COLUMNS])
 
@@ -614,4 +722,4 @@ def export_txt_directory_to_excel(input_dir: Path, output_file: Path) -> int:
     workbook.save(output_file)
     write_bachelor_program_map(bachelor_programs)
 
-    return len(txt_files)
+    return max(sheet.max_row - 1, 0)
