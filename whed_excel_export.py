@@ -8,6 +8,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
+from isced_f import classify_bachelors_cell, split_bachelor_programs, write_bachelor_program_map
+
 
 SECTION_TITLES = [
     "General Information",
@@ -49,6 +51,7 @@ OUTPUT_COLUMNS = [
     "Staff Full Time Total",
     "Staff Part Time Total",
     "Bachelor's Degree",
+    "ISCED-F",
     "Master's Degree",
     "Doctor's Degree",
     "Diploma/Certificate",
@@ -518,6 +521,7 @@ def parse_txt_file(path: Path) -> Dict[str, str]:
     parse_general_information(sections["General Information"], record)
     parse_student_staff(sections["Student & Staff Numbers"], record)
     parse_degrees(sections["Degrees"], record)
+    record["ISCED-F"] = classify_bachelors_cell(record.get("Bachelor's Degree", ""))
 
     for title in SECTION_TITLES:
         record[title] = "\n".join(sections[title]).strip()
@@ -556,6 +560,7 @@ def autofit_worksheet(worksheet) -> None:
         "General Information": 40,
         "Divisions": 40,
         "Degrees": 40,
+        "ISCED-F": 18,
         "Raw Text": 60,
     }
 
@@ -592,9 +597,11 @@ def export_txt_directory_to_excel(input_dir: Path, output_file: Path) -> int:
         cell.alignment = wrap_alignment
 
     txt_files = sorted(input_dir.glob("*.txt"), key=lambda item: item.name.casefold())
+    bachelor_programs: set[str] = set()
 
     for txt_file in txt_files:
         record = parse_txt_file(txt_file)
+        bachelor_programs.update(split_bachelor_programs(record.get("Bachelor's Degree", "")))
         sheet.append([record.get(column, "") for column in OUTPUT_COLUMNS])
 
     for row in sheet.iter_rows(min_row=2):
@@ -605,5 +612,6 @@ def export_txt_directory_to_excel(input_dir: Path, output_file: Path) -> int:
     sheet.auto_filter.ref = sheet.dimensions
     # autofit_worksheet(sheet)
     workbook.save(output_file)
+    write_bachelor_program_map(bachelor_programs)
 
     return len(txt_files)
