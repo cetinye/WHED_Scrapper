@@ -242,6 +242,10 @@ DEGREE_NON_SUBJECT_LABELS = {
     "remark",
 }
 
+DEGREE_FIELD_LABEL = "fields of study"
+DEGREE_DYNAMIC_INSERT_AFTER = "Diploma/Certificate"
+INTERNAL_DEGREE_FIELDS_KEY = "__degree_fields_entries"
+
 
 def normalize_space(value: str) -> str:
     return MULTISPACE_RE.sub(" ", value or "").strip()
@@ -294,21 +298,24 @@ def split_subject_items(value: str) -> List[str]:
     return items
 
 
-def append_subject_values(record: Dict[str, str], key: str, value: str) -> None:
-    new_items = split_subject_items(value)
-    if not new_items:
-        return
+def merge_subject_values(current: str, value: str) -> str:
+    merged_items = split_subject_items(current)
+    seen = {item.casefold() for item in merged_items}
 
-    current_items = split_subject_items(record.get(key, ""))
-    seen = {item.casefold() for item in current_items}
-
-    for item in new_items:
+    for item in split_subject_items(value):
         lowered = item.casefold()
         if lowered not in seen:
-            current_items.append(item)
+            merged_items.append(item)
             seen.add(lowered)
 
-    record[key] = ", ".join(current_items)
+    return ", ".join(merged_items)
+
+
+def append_subject_values(record: Dict[str, str], key: str, value: str) -> None:
+    merged = merge_subject_values(record.get(key, ""), value)
+    if not merged:
+        return
+    record[key] = merged
 
 
 def is_navigation_line(line: str) -> bool:
@@ -476,15 +483,31 @@ def is_degree_heading(line: str) -> bool:
     if not normalized or normalized.endswith(":"):
         return False
 
-    return bool(
-        re.match(
-            r"^(bachelor|master|doctor|doktor|ph\.?d|diplom|diploma|certificate|certificat|"
-            r"post-bachelor|also diploma|licenc|licence|licenciat|bacharel|bakalavr|"
-            r"undergraduate|graduate|magister|maestr)",
+    key, _ = split_key_value(normalized)
+    if key is not None:
+        return False
+
+    if not categorize_degree(normalized):
+        return False
+
+    lowered = normalized.casefold()
+    if lowered in DEGREE_NON_SUBJECT_LABELS or lowered == DEGREE_FIELD_LABEL:
+        return False
+
+    has_parenthetical_degree = bool(
+        re.search(
+            r"\((?:[^)]*(degree|doctorate|ph\.?d|bachelor|master|diploma|certificate)[^)]*)\)",
             normalized,
             flags=re.IGNORECASE,
         )
     )
+    if has_parenthetical_degree:
+        return True
+
+    if ";" in normalized or normalized.endswith("."):
+        return False
+
+    return len(normalized.split()) <= 12
 
 
 def extract_inline_degree_subjects(title: str) -> str:
@@ -504,15 +527,19 @@ def extract_inline_degree_subjects(title: str) -> str:
     return ""
 
 
-def parse_degrees(lines: List[str], record: Dict[str, str]) -> None:
-    current_column = ""
+def parse_degree_entries(lines: List[str]) -> List[Dict[str, str]]:
+    degree_entries: List[Dict[str, str]] = []
+    current_entry: Dict[str, str] | None = None
     pending_label = ""
     pending_buffer: List[str] = []
 
     def flush_pending() -> None:
         nonlocal pending_label, pending_buffer
-        if current_column and pending_label.casefold() == "fields of study" and pending_buffer:
-            append_subject_values(record, current_column, " ".join(pending_buffer))
+        if current_entry and pending_label == DEGREE_FIELD_LABEL and pending_buffer:
+            current_entry["fields_of_study"] = merge_subject_values(
+                current_entry.get("fields_of_study", ""),
+                " ".join(pending_buffer),
+            )
         pending_label = ""
         pending_buffer = []
 
@@ -521,37 +548,54 @@ def parse_degrees(lines: List[str], record: Dict[str, str]) -> None:
             flush_pending()
             continue
 
-        if current_column and pending_label.casefold() == "fields of study" and line.casefold() in DEGREE_NON_SUBJECT_LABELS:
+        if is_degree_heading(line):
             flush_pending()
-            continue
-
-        if current_column and pending_label.casefold() == "fields of study" and not is_degree_heading(line):
-            pending_buffer.append(line)
-            continue
-
-        degree_column = categorize_degree(line) if is_degree_heading(line) else ""
-        if degree_column:
-            flush_pending()
-            current_column = degree_column
+            current_entry = {
+                "type": categorize_degree(line),
+                "title": normalize_space(line),
+                "fields_of_study": "",
+            }
             inline_subjects = extract_inline_degree_subjects(line)
             if inline_subjects:
-                append_subject_values(record, current_column, inline_subjects)
+                current_entry["fields_of_study"] = merge_subject_values("", inline_subjects)
+            degree_entries.append(current_entry)
             continue
 
         key, value = split_key_value(line)
         if key is not None:
             flush_pending()
-            if current_column and key.casefold() == "fields of study":
+            if current_entry and key.casefold() == DEGREE_FIELD_LABEL:
                 if value:
-                    append_subject_values(record, current_column, value)
+                    current_entry["fields_of_study"] = merge_subject_values(
+                        current_entry.get("fields_of_study", ""),
+                        value,
+                    )
                 else:
-                    pending_label = key
+                    pending_label = DEGREE_FIELD_LABEL
             continue
 
-        if current_column and pending_label.casefold() == "fields of study":
+        if current_entry and pending_label == DEGREE_FIELD_LABEL:
             pending_buffer.append(line)
 
     flush_pending()
+
+    return [
+        entry
+        for entry in degree_entries
+        if normalize_space(entry.get("type", "")) and normalize_space(entry.get("fields_of_study", ""))
+    ]
+
+
+def parse_degrees(lines: List[str], record: Dict[str, str]) -> None:
+    degree_entries = parse_degree_entries(lines)
+    record[INTERNAL_DEGREE_FIELDS_KEY] = degree_entries
+
+    for entry in degree_entries:
+        append_subject_values(
+            record,
+            entry.get("type", ""),
+            entry.get("fields_of_study", ""),
+        )
 
 
 def collect_sections(lines: List[str]) -> tuple[Dict[str, List[str]], str]:
@@ -718,7 +762,67 @@ def load_enrichment_records(path: Path | None) -> Dict[str, Dict[str, str]]:
     return enrichment_records
 
 
-def autofit_worksheet(worksheet) -> None:
+def build_degree_field_columns(max_degree_field_count: int) -> List[str]:
+    columns: List[str] = []
+    for index in range(1, max_degree_field_count + 1):
+        columns.extend(
+            [
+                f"Degree Fields {index} Type",
+                f"Degree Fields {index} Title",
+                f"Degree Fields {index} Subjects",
+            ]
+        )
+    return columns
+
+
+def build_output_columns(max_degree_field_count: int) -> List[str]:
+    dynamic_columns = build_degree_field_columns(max_degree_field_count)
+    if not dynamic_columns:
+        return list(OUTPUT_COLUMNS)
+
+    columns: List[str] = []
+    inserted = False
+    for column in OUTPUT_COLUMNS:
+        columns.append(column)
+        if column == DEGREE_DYNAMIC_INSERT_AFTER:
+            columns.extend(dynamic_columns)
+            inserted = True
+
+    if not inserted:
+        columns.extend(dynamic_columns)
+
+    return columns
+
+
+def build_output_row(record: Dict[str, str], max_degree_field_count: int) -> List[str]:
+    row: List[str] = []
+    degree_entries = record.get(INTERNAL_DEGREE_FIELDS_KEY, [])
+    dynamic_values: List[str] = []
+
+    for index in range(max_degree_field_count):
+        entry = degree_entries[index] if index < len(degree_entries) else {}
+        dynamic_values.extend(
+            [
+                entry.get("type", ""),
+                entry.get("title", ""),
+                entry.get("fields_of_study", ""),
+            ]
+        )
+
+    inserted = False
+    for column in OUTPUT_COLUMNS:
+        row.append(record.get(column, ""))
+        if column == DEGREE_DYNAMIC_INSERT_AFTER:
+            row.extend(dynamic_values)
+            inserted = True
+
+    if not inserted:
+        row.extend(dynamic_values)
+
+    return row
+
+
+def autofit_worksheet(worksheet, column_names: List[str]) -> None:
     width_overrides = {
         "Whed Link": 42,
         "University Name": 34,
@@ -732,7 +836,7 @@ def autofit_worksheet(worksheet) -> None:
         "Raw Text": 60,
     }
 
-    for index, column_name in enumerate(OUTPUT_COLUMNS, start=1):
+    for index, column_name in enumerate(column_names, start=1):
         letter = get_column_letter(index)
         if column_name in width_overrides:
             worksheet.column_dimensions[letter].width = width_overrides[column_name]
@@ -760,20 +864,10 @@ def export_txt_directory_to_excel(
         enrichment_file = default_candidate if default_candidate.exists() else None
     enrichment_records = load_enrichment_records(enrichment_file)
 
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Institutions"
-    sheet.append(OUTPUT_COLUMNS)
-
-    header_font = Font(bold=True)
-    wrap_alignment = Alignment(vertical="top", wrap_text=True)
-
-    for cell in sheet[1]:
-        cell.font = header_font
-        cell.alignment = wrap_alignment
-
     txt_files = sorted(input_dir.glob("*.txt"), key=lambda item: item.name.casefold())
     bachelor_programs: set[str] = set()
+    records: List[Dict[str, str]] = []
+    max_degree_field_count = 0
 
     for txt_file in txt_files:
         record = parse_txt_file(txt_file)
@@ -793,7 +887,24 @@ def export_txt_directory_to_excel(
             )
         )
         bachelor_programs.update(split_bachelor_programs(record.get("Bachelor's Degree", "")))
-        sheet.append([record.get(column, "") for column in OUTPUT_COLUMNS])
+        max_degree_field_count = max(max_degree_field_count, len(record.get(INTERNAL_DEGREE_FIELDS_KEY, [])))
+        records.append(record)
+
+    output_columns = build_output_columns(max_degree_field_count)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Institutions"
+    sheet.append(output_columns)
+
+    header_font = Font(bold=True)
+    wrap_alignment = Alignment(vertical="top", wrap_text=True)
+
+    for cell in sheet[1]:
+        cell.font = header_font
+        cell.alignment = wrap_alignment
+
+    for record in records:
+        sheet.append(build_output_row(record, max_degree_field_count))
 
     for row in sheet.iter_rows(min_row=2):
         for cell in row:
@@ -801,7 +912,7 @@ def export_txt_directory_to_excel(
 
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
-    # autofit_worksheet(sheet)
+    # autofit_worksheet(sheet, output_columns)
     workbook.save(output_file)
     write_bachelor_program_map(bachelor_programs)
 
