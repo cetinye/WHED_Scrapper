@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Dict, Iterable, List
@@ -127,6 +128,8 @@ OUTPUT_COLUMNS = [
     "History",
     "Academic Year",
     "Admission Requirements",
+    "Admission Requirements (Enriched)",
+    "Annual Tuition / Cost",
     "Language(s)",
     "Accrediting Agency",
     "Student Body",
@@ -165,11 +168,20 @@ GENERAL_FIELD_MAP = {
     "history": "History",
     "academic year": "Academic Year",
     "admission requirements": "Admission Requirements",
+    "tuition fees": "Annual Tuition / Cost",
     "language(s)": "Language(s)",
     "languages": "Language(s)",
     "accrediting agency": "Accrediting Agency",
     "student body": "Student Body",
 }
+
+IGNORED_GENERAL_HEADINGS = {
+    "address",
+    "other site",
+    "other sites",
+}
+
+DEFAULT_ENRICHMENT_FILE = "whed_enrichment.jsonl"
 
 STUDENT_FIELD_MAP = {
     "statistics year": "Student Statistics Year",
@@ -331,6 +343,11 @@ def first_non_empty(values: Iterable[str]) -> str:
     return ""
 
 
+def extract_primary_url(value: str) -> str:
+    match = re.search(r"https?://\S+", value or "", flags=re.IGNORECASE)
+    return match.group(0).rstrip(").,;") if match else normalize_space(value)
+
+
 def parse_general_information(lines: List[str], record: Dict[str, str]) -> None:
     active_field = ""
     buffer: List[str] = []
@@ -350,20 +367,31 @@ def parse_general_information(lines: List[str], record: Dict[str, str]) -> None:
             flush_active()
             continue
 
-        if active_field and line.casefold().startswith(("http://", "https://")):
+        lowered_line = line.casefold()
+        if active_field and lowered_line.startswith(("http://", "https://")):
             buffer.append(line)
             continue
 
-        if line.casefold() in GENERAL_FIELD_MAP:
+        if lowered_line in GENERAL_FIELD_MAP:
             flush_active()
-            active_field = GENERAL_FIELD_MAP[line.casefold()]
+            active_field = GENERAL_FIELD_MAP[lowered_line]
+            continue
+
+        if lowered_line in IGNORED_GENERAL_HEADINGS:
+            flush_active()
             continue
 
         key, value = split_key_value(line)
         if key is not None:
+            key_lower = key.casefold()
+            mapped_address = ADDRESS_FIELD_MAP.get(key_lower)
+            mapped_general = GENERAL_FIELD_MAP.get(key_lower)
+
+            if active_field and not mapped_address and not mapped_general:
+                buffer.append(f"{key}: {value}" if value else key)
+                continue
+
             flush_active()
-            mapped_address = ADDRESS_FIELD_MAP.get(key.casefold())
-            mapped_general = GENERAL_FIELD_MAP.get(key.casefold())
             target_field = mapped_address or mapped_general or key
             if mapped_address and value:
                 append_value(record, mapped_address, value)
@@ -638,6 +666,8 @@ def parse_txt_file(path: Path) -> Dict[str, str]:
                 record["Website"] = candidate.split(":", 1)[1].strip()
                 break
 
+    record["Website"] = extract_primary_url(record.get("Website", ""))
+
     if not record["IAU Code"]:
         match = IAU_ID_RE.search(path.name)
         if match:
@@ -654,6 +684,38 @@ def parse_txt_file(path: Path) -> Dict[str, str]:
         record["Statistics Year"] = student_year or staff_year
 
     return record
+
+
+def load_enrichment_records(path: Path | None) -> Dict[str, Dict[str, str]]:
+    if path is None:
+        return {}
+
+    path = Path(path)
+    if not path.exists():
+        return {}
+
+    enrichment_records: Dict[str, Dict[str, str]] = {}
+    for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        iau_code = normalize_space(str(payload.get("iau_code", "")))
+        if not iau_code:
+            continue
+
+        enrichment_records[iau_code] = {
+            "Admission Requirements (Enriched)": normalize_space(
+                str(payload.get("admission_requirements", ""))
+            ),
+            "Annual Tuition / Cost": normalize_space(str(payload.get("annual_tuition_cost", ""))),
+        }
+
+    return enrichment_records
 
 
 def autofit_worksheet(worksheet) -> None:
@@ -685,10 +747,18 @@ def autofit_worksheet(worksheet) -> None:
         worksheet.column_dimensions[letter].width = min(max(max_length + 2, 12), 60)
 
 
-def export_txt_directory_to_excel(input_dir: Path, output_file: Path) -> int:
+def export_txt_directory_to_excel(
+    input_dir: Path,
+    output_file: Path,
+    enrichment_file: Path | None = None,
+) -> int:
     input_dir = Path(input_dir)
     output_file = Path(output_file)
     output_file.parent.mkdir(parents=True, exist_ok=True)
+    if enrichment_file is None:
+        default_candidate = output_file.parent / DEFAULT_ENRICHMENT_FILE
+        enrichment_file = default_candidate if default_candidate.exists() else None
+    enrichment_records = load_enrichment_records(enrichment_file)
 
     workbook = Workbook()
     sheet = workbook.active
@@ -709,6 +779,19 @@ def export_txt_directory_to_excel(input_dir: Path, output_file: Path) -> int:
         record = parse_txt_file(txt_file)
         if not is_allowed_country(record.get("Country", "")):
             continue
+        enrichment = enrichment_records.get(record.get("IAU Code", ""), {})
+        record["Admission Requirements (Enriched)"] = first_non_empty(
+            (
+                enrichment.get("Admission Requirements (Enriched)", ""),
+                record.get("Admission Requirements", ""),
+            )
+        )
+        record["Annual Tuition / Cost"] = first_non_empty(
+            (
+                enrichment.get("Annual Tuition / Cost", ""),
+                record.get("Annual Tuition / Cost", ""),
+            )
+        )
         bachelor_programs.update(split_bachelor_programs(record.get("Bachelor's Degree", "")))
         sheet.append([record.get(column, "") for column in OUTPUT_COLUMNS])
 

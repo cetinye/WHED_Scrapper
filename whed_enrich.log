@@ -1,0 +1,5 @@
+[info] Loaded 4471 allowed institutions, 0 existing enrichment rows, 4070 row(s) need processing.
+[progress] 25/4070 processed | admission filled: 20 | tuition filled: 17
+[progress] 50/4070 processed | admission filled: 41 | tuition filled: 27
+[progress] 75/4070 processed | admission filled: 60 | tuition filled: 30
+[progress] 100/4070 processed | admission filled: 83 | tuition filled: 49
