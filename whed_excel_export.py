@@ -12,6 +12,8 @@ from openpyxl.utils import get_column_letter
 from isced_f import classify_bachelors_cell, split_bachelor_programs, write_bachelor_program_map
 
 
+ROOT_DIR = Path(__file__).resolve().parent
+
 SECTION_TITLES = [
     "General Information",
     "Officers",
@@ -128,6 +130,7 @@ OUTPUT_COLUMNS = [
     "History",
     "Academic Year",
     "Admission Requirements",
+    "Admission Requirement IDs",
     "Admission Requirements (Enriched)",
     "Annual Tuition / Cost",
     "Language(s)",
@@ -182,6 +185,73 @@ IGNORED_GENERAL_HEADINGS = {
 }
 
 DEFAULT_ENRICHMENT_FILE = "whed_enrichment.jsonl"
+DEFAULT_ADMISSION_REQUIREMENT_ID_FILE = ROOT_DIR / "References" / "Codes" / "admission_requirement_condition_ids.json"
+ADMISSION_REQUIREMENT_MAPPING_SHEET = "Admission Requirement IDs"
+INTERNAL_ADMISSION_REQUIREMENT_LABELS_KEY = "__admission_requirement_labels"
+GENERIC_REQUIREMENT_HINTS = (
+    "certificate",
+    "diploma",
+    "degree",
+    "qualification",
+    "exam",
+    "examination",
+    "test",
+    "entrance",
+    "admission",
+    "matura",
+    "baccala",
+    "bacalaureat",
+    "high school",
+    "secondary school",
+    "university studies",
+    "undergraduate",
+    "college",
+    "portfolio",
+    "audition",
+    "essay",
+    "recommendation",
+    "recommendations",
+    "transcript",
+    "gpa",
+    "semester hours",
+    "credit hours",
+    "experience",
+    "internship",
+    "training",
+    "language",
+    "english",
+    "german",
+    "toefl",
+    "ielts",
+    "sat",
+    "act",
+    "gmat",
+    "gre",
+    "ged",
+    "interview",
+    "finances",
+    "finance",
+    "translation",
+    "curriculum",
+    "letter of recommendation",
+)
+GENERIC_LANGUAGE_ONLY_FRAGMENTS = {
+    "english",
+    "german",
+    "french",
+    "italian",
+    "spanish",
+    "portuguese",
+    "arabic",
+    "turkish",
+    "polish",
+    "romanian",
+    "greek",
+    "czech",
+    "slovak",
+    "hungarian",
+    "russian",
+}
 
 STUDENT_FIELD_MAP = {
     "statistics year": "Student Statistics Year",
@@ -348,6 +418,443 @@ def first_non_empty(values: Iterable[str]) -> str:
         if value:
             return value
     return ""
+
+
+def normalize_condition_label(value: str) -> str:
+    return normalize_space(value).strip(" ,;.")
+
+
+def unique_preserve_order(values: Iterable[str]) -> List[str]:
+    result: List[str] = []
+    seen: set[str] = set()
+    for value in values:
+        clean = normalize_condition_label(value)
+        if not clean:
+            continue
+        lowered = clean.casefold()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        result.append(clean)
+    return result
+
+
+def next_non_space_char(value: str, start_index: int) -> str:
+    for index in range(start_index, len(value)):
+        if not value[index].isspace():
+            return value[index]
+    return ""
+
+
+def split_admission_requirement_clauses(value: str) -> List[str]:
+    normalized = normalize_space(value)
+    if not normalized:
+        return []
+
+    clauses: List[str] = []
+    buffer: List[str] = []
+    depth = 0
+
+    def flush_buffer() -> None:
+        clause = normalize_condition_label("".join(buffer))
+        if clause:
+            clauses.append(clause)
+        buffer.clear()
+
+    for index, char in enumerate(normalized):
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth > 0:
+            depth -= 1
+
+        should_split = False
+        if depth == 0 and char == ";":
+            should_split = True
+        elif depth == 0 and char == ".":
+            next_char = next_non_space_char(normalized, index + 1)
+            should_split = not next_char or next_char.isupper()
+        if should_split:
+            flush_buffer()
+            continue
+
+        buffer.append(char)
+
+    flush_buffer()
+    return clauses
+
+
+def clean_condition_fragment(value: str) -> str:
+    cleaned = normalize_condition_label(value)
+    lowered = cleaned.casefold()
+    prefixes = (
+        "and ",
+        "or ",
+        "also ",
+        "plus ",
+        "additionally ",
+        "additionally, ",
+    )
+    for prefix in prefixes:
+        if lowered.startswith(prefix):
+            cleaned = normalize_condition_label(cleaned[len(prefix) :])
+            lowered = cleaned.casefold()
+    return cleaned
+
+
+def split_fragment_on_commas(value: str) -> List[str]:
+    normalized = clean_condition_fragment(value)
+    if not normalized:
+        return []
+
+    parts: List[str] = []
+    buffer: List[str] = []
+    depth = 0
+
+    def flush_buffer() -> None:
+        fragment = clean_condition_fragment("".join(buffer))
+        if fragment:
+            parts.append(fragment)
+        buffer.clear()
+
+    for index, char in enumerate(normalized):
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth > 0:
+            depth -= 1
+
+        next_char = next_non_space_char(normalized, index + 1)
+        prev_char = buffer[-1] if buffer else ""
+        should_split = (
+            depth == 0
+            and char == ","
+            and not (prev_char.isdigit() and next_char.isdigit())
+        )
+
+        if should_split:
+            flush_buffer()
+            continue
+
+        buffer.append(char)
+
+    flush_buffer()
+    return parts or [normalized]
+
+
+def looks_like_requirement_fragment(value: str) -> bool:
+    lowered = clean_condition_fragment(value).casefold()
+    if not lowered:
+        return False
+    return any(hint in lowered for hint in GENERIC_REQUIREMENT_HINTS)
+
+
+def split_fragment_on_and(value: str) -> List[str]:
+    normalized = clean_condition_fragment(value)
+    if not normalized:
+        return []
+
+    parts: List[str] = []
+    buffer: List[str] = []
+    depth = 0
+    index = 0
+    separator = " and "
+
+    def flush_buffer() -> None:
+        fragment = clean_condition_fragment("".join(buffer))
+        if fragment:
+            parts.append(fragment)
+        buffer.clear()
+
+    while index < len(normalized):
+        char = normalized[index]
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth > 0:
+            depth -= 1
+
+        if depth == 0 and normalized[index : index + len(separator)].casefold() == separator:
+            flush_buffer()
+            index += len(separator)
+            continue
+
+        buffer.append(char)
+        index += 1
+
+    flush_buffer()
+    if len(parts) <= 1:
+        return parts or [normalized]
+
+    if any(part.casefold() in GENERIC_LANGUAGE_ONLY_FRAGMENTS for part in parts):
+        return [normalized]
+
+    if not all(looks_like_requirement_fragment(part) or len(part.split()) >= 3 for part in parts):
+        return [normalized]
+
+    return parts
+
+
+def extract_generic_admission_requirement_conditions(value: str) -> List[str]:
+    clauses = split_admission_requirement_clauses(value)
+    if not clauses:
+        return []
+
+    conditions: List[str] = []
+    for clause in clauses:
+        comma_fragments = split_fragment_on_commas(clause)
+        for comma_fragment in comma_fragments:
+            and_fragments = split_fragment_on_and(comma_fragment)
+            if and_fragments:
+                conditions.extend(and_fragments)
+            else:
+                clean_fragment = clean_condition_fragment(comma_fragment)
+                if clean_fragment:
+                    conditions.append(clean_fragment)
+
+    return unique_preserve_order(conditions)
+
+
+def classify_germany_admission_requirement_clause(clause: str) -> List[str]:
+    lowered = normalize_condition_label(clause).casefold()
+    if not lowered:
+        return []
+
+    labels: List[str] = []
+
+    def add(label: str) -> None:
+        if label not in labels:
+            labels.append(label)
+
+    has_specific_secondary_certificate = False
+
+    if "reifezeugn" in lowered:
+        add("Secondary school certificate (Reifezeugnis)")
+        has_specific_secondary_certificate = True
+
+    if any(token in lowered for token in ("abitur", "allgemeine hochschulreife", "allgemeine hochschulsreife")):
+        add("Secondary school certificate (Abitur / Allgemeine Hochschulreife)")
+        has_specific_secondary_certificate = True
+
+    if any(
+        token in lowered
+        for token in (
+            "fachhochschulreife",
+            "fachhochschulereife",
+            "fachhochschulreifezeugnis",
+            "fachabitur",
+            "advanced technical college entrance qualification",
+        )
+    ):
+        add("Secondary school certificate (Fachhochschulreife / Fachabitur)")
+        has_specific_secondary_certificate = True
+
+    if "fachgebundene" in lowered:
+        add("Secondary school certificate (Fachgebundene Hochschulreife)")
+        has_specific_secondary_certificate = True
+
+    if "hochschulzugangsberechtigung" in lowered:
+        add("School leaving certificate (Hochschulzugangsberechtigung)")
+        has_specific_secondary_certificate = True
+
+    if not has_specific_secondary_certificate and any(
+        token in lowered
+        for token in (
+            "secondary school certificate",
+            "secondary school leaving certificate",
+            "school leaving certificate",
+            "school-leaving certificate",
+            "final secondary school examination",
+            "high school diploma",
+            "graduation from high school",
+            "graduation diploma",
+        )
+    ):
+        add("Secondary school certificate")
+
+    if any(
+        token in lowered
+        for token in (
+            "university entry qualification",
+            "university entrance certificate",
+            "higher education entry qualification",
+            "higher education entrance qualification",
+            "general qualification for university entrance",
+            "general or subject-specific university entrance qualification",
+            "school-leaving certificate qualifying for university entrance",
+            "academic standard required for university entrance",
+            "entrance diploma",
+            "a-level",
+            "a-levels",
+            "matura",
+            "heeq",
+        )
+    ):
+        add("University entry qualification")
+
+    if "technical training" in lowered:
+        add("Technical training")
+
+    if "2 years' university studies" in lowered or "2 years university studies" in lowered:
+        add("Previous university studies")
+
+    if "bachelor" in lowered or "equivalence to ba" in lowered:
+        add("Bachelor's degree or equivalent")
+
+    if (
+        "staatsexamen" in lowered
+        or "magister artium" in lowered
+        or "advanced academic degree" in lowered
+        or re.search(r"\bdiplom\b", lowered)
+    ):
+        add("Advanced academic degree (Diplom / Staatsexamen / Magister Artium)")
+
+    if "meisterprü" in lowered or "master craftman" in lowered:
+        add("Master craftman's diploma (Meisterprüfung)")
+
+    if any(token in lowered for token in ("zulassungsprü", "zalassungsprü", "special course of studies")):
+        add("Special admission examination (Zulassungsprüfung)")
+
+    german_language_tokens = (
+        "german language",
+        "knowledge of german",
+        "knowledge of the german language",
+        "good command of the german language",
+        "proficiency in german",
+        "sufficient knowledge of german",
+        "certificate of excellent knowledge of german",
+        "german language level",
+        "german language proficiency",
+        "german language test",
+        "testdaf",
+        "test daf",
+        " dsh",
+        "dsh ",
+        "(dsh",
+        "pnds",
+        "zentrale mittelstufenprüfung",
+        "(zmp)",
+        "daf or dsh",
+        "certified knowledge of the german language",
+        " c1",
+        " c1 ",
+    )
+    has_german_language_requirement = any(token in lowered for token in german_language_tokens)
+    if has_german_language_requirement:
+        add("German language proficiency")
+
+    if not has_german_language_requirement and any(
+        token in lowered
+        for token in (
+            "language examination",
+            "language competence",
+            "language requirements",
+            "language test for foreign students",
+            "language certificate",
+        )
+    ):
+        add("Language proficiency / examination")
+
+    has_english_test = any(token in lowered for token in ("toefl", "ielts"))
+    if not has_english_test and any(
+        token in lowered
+        for token in (
+            "proficiency in german and english",
+            "proficiency in english",
+            "good command of english",
+            "english language",
+            "programmes taught in english",
+            "programmes in english",
+            "taught in english",
+        )
+    ):
+        add("English language proficiency")
+
+    if "toefl" in lowered:
+        add("TOEFL")
+
+    if "ielts" in lowered:
+        add("IELTS")
+
+    if "sat" in lowered:
+        add("SAT")
+
+    if "gmat" in lowered:
+        add("GMAT")
+
+    if "working/training contract" in lowered:
+        add("Working / training contract")
+
+    if "work experience" in lowered or "practical experience" in lowered:
+        add("Work experience")
+
+    practical_training_tokens = (
+        "practical training",
+        "praktikum",
+        "internship",
+        "placement of 6 weeks",
+        "pre-study internship",
+        "pre-practical",
+        "pre-practicals",
+        "vorpraktikum",
+        "3 months practical",
+        "relevant practical experience",
+        "practical in subject of study",
+        "basic three-month internship",
+    )
+    if any(token in lowered for token in practical_training_tokens):
+        add("Practical training / internship")
+
+    if any(token in lowered for token in ("selection process", "auswahlverfahren", "qualification examination", "special entrance qualification")):
+        add("Selection / qualification procedure")
+
+    if "entrance examination" in lowered or "entrance exam" in lowered:
+        add("Entrance examination")
+
+    if "aptitude test" in lowered or "aptitude tests" in lowered or "physical aptitude test" in lowered:
+        add("Aptitude test")
+
+    if "portfolio" in lowered:
+        add("Portfolio")
+
+    if "audition" in lowered:
+        add("Audition")
+
+    if "artistic" in lowered:
+        add("Artistic aptitude evaluation")
+
+    if "armed forces officer examination" in lowered or "armed forces officers examination" in lowered:
+        add("Armed Forces Officer examination")
+
+    if any(token in lowered for token in ("12-yr engagement", "12 year engagement", "12-year engagement")):
+        add("Military service commitment")
+
+    if "personality" in lowered or "intelligence structure test" in lowered:
+        add("Personality / intelligence test")
+
+    if any(token in lowered for token in ("depends on the chosen study programme", "admission procedure")):
+        add("Programme-specific admission procedure")
+
+    return labels
+
+
+def extract_germany_admission_requirement_conditions(value: str) -> List[str]:
+    clauses = split_admission_requirement_clauses(value)
+    if not clauses:
+        return []
+
+    conditions: List[str] = []
+    for clause in clauses:
+        clause_conditions = classify_germany_admission_requirement_clause(clause)
+        if clause_conditions:
+            conditions.extend(clause_conditions)
+            continue
+        conditions.append(clause)
+
+    return unique_preserve_order(conditions)
+
+
+def extract_country_admission_requirement_conditions(country: str, value: str) -> List[str]:
+    if normalize_space(country) == "Germany":
+        return extract_germany_admission_requirement_conditions(value)
+    return extract_generic_admission_requirement_conditions(value)
 
 
 def extract_primary_url(value: str) -> str:
@@ -762,6 +1269,142 @@ def load_enrichment_records(path: Path | None) -> Dict[str, Dict[str, str]]:
     return enrichment_records
 
 
+def load_admission_requirement_id_maps(
+    path: Path | None = DEFAULT_ADMISSION_REQUIREMENT_ID_FILE,
+) -> Dict[str, Dict[str, int]]:
+    if path is None:
+        return {}
+
+    path = Path(path)
+    if not path.exists():
+        return {}
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except json.JSONDecodeError:
+        return {}
+
+    if not isinstance(payload, dict):
+        return {}
+
+    result: Dict[str, Dict[str, int]] = {}
+    for country, country_mapping in payload.items():
+        if not isinstance(country_mapping, dict):
+            continue
+
+        normalized_country = normalize_space(str(country))
+        if not normalized_country:
+            continue
+
+        parsed_mapping: Dict[str, int] = {}
+        for label, condition_id in country_mapping.items():
+            normalized_label = normalize_condition_label(str(label))
+            try:
+                parsed_id = int(condition_id)
+            except (TypeError, ValueError):
+                continue
+            if normalized_label and parsed_id > 0:
+                parsed_mapping[normalized_label] = parsed_id
+
+        if parsed_mapping:
+            result[normalized_country] = parsed_mapping
+
+    return result
+
+
+def write_admission_requirement_id_maps(
+    country_maps: Dict[str, Dict[str, int]],
+    path: Path | None = DEFAULT_ADMISSION_REQUIREMENT_ID_FILE,
+) -> Path | None:
+    if path is None:
+        return None
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    serializable: Dict[str, Dict[str, int]] = {}
+    for country in sorted(country_maps):
+        entries = country_maps[country]
+        serializable[country] = {
+            label: condition_id
+            for label, condition_id in sorted(entries.items(), key=lambda item: (item[1], item[0].casefold()))
+        }
+
+    path.write_text(json.dumps(serializable, indent=2, ensure_ascii=True), encoding="utf-8")
+    return path
+
+
+def assign_admission_requirement_ids(
+    records: List[Dict[str, str]],
+    id_map_path: Path | None = DEFAULT_ADMISSION_REQUIREMENT_ID_FILE,
+) -> tuple[Dict[str, Dict[str, int]], Dict[tuple[str, str], int]]:
+    country_maps = load_admission_requirement_id_maps(id_map_path)
+    usage_counts: Dict[tuple[str, str], int] = {}
+
+    for record in records:
+        country = normalize_space(record.get("Country", ""))
+        conditions = extract_country_admission_requirement_conditions(country, record.get("Admission Requirements", ""))
+        record[INTERNAL_ADMISSION_REQUIREMENT_LABELS_KEY] = conditions
+
+        if not conditions:
+            record["Admission Requirement IDs"] = ""
+            continue
+
+        country_map = country_maps.setdefault(country, {})
+        next_id = max(country_map.values(), default=0) + 1
+        row_ids: List[str] = []
+
+        for condition in conditions:
+            if condition not in country_map:
+                country_map[condition] = next_id
+                next_id += 1
+
+            row_ids.append(str(country_map[condition]))
+            usage_counts[(country, condition)] = usage_counts.get((country, condition), 0) + 1
+
+        record["Admission Requirement IDs"] = ", ".join(row_ids)
+
+    write_admission_requirement_id_maps(country_maps, id_map_path)
+    return country_maps, usage_counts
+
+
+def add_admission_requirement_mapping_sheet(
+    workbook: Workbook,
+    country_maps: Dict[str, Dict[str, int]],
+    usage_counts: Dict[tuple[str, str], int],
+) -> None:
+    if ADMISSION_REQUIREMENT_MAPPING_SHEET in workbook.sheetnames:
+        workbook.remove(workbook[ADMISSION_REQUIREMENT_MAPPING_SHEET])
+
+    sheet = workbook.create_sheet(ADMISSION_REQUIREMENT_MAPPING_SHEET)
+    sheet.append(["Country", "Condition ID", "Condition", "Usage Count"])
+
+    header_font = Font(bold=True)
+    wrap_alignment = Alignment(vertical="top", wrap_text=True)
+
+    for cell in sheet[1]:
+        cell.font = header_font
+        cell.alignment = wrap_alignment
+
+    for country in sorted(country_maps):
+        for condition, condition_id in sorted(country_maps[country].items(), key=lambda item: (item[1], item[0].casefold())):
+            sheet.append(
+                [
+                    country,
+                    condition_id,
+                    condition,
+                    usage_counts.get((country, condition), 0),
+                ]
+            )
+
+    for row in sheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = wrap_alignment
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+
+
 def build_degree_field_columns(max_degree_field_count: int) -> List[str]:
     columns: List[str] = []
     for index in range(1, max_degree_field_count + 1):
@@ -890,6 +1533,7 @@ def export_txt_directory_to_excel(
         max_degree_field_count = max(max_degree_field_count, len(record.get(INTERNAL_DEGREE_FIELDS_KEY, [])))
         records.append(record)
 
+    admission_requirement_id_maps, admission_requirement_usage_counts = assign_admission_requirement_ids(records)
     output_columns = build_output_columns(max_degree_field_count)
     workbook = Workbook()
     sheet = workbook.active
@@ -912,6 +1556,11 @@ def export_txt_directory_to_excel(
 
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
+    add_admission_requirement_mapping_sheet(
+        workbook,
+        admission_requirement_id_maps,
+        admission_requirement_usage_counts,
+    )
     # autofit_worksheet(sheet, output_columns)
     workbook.save(output_file)
     write_bachelor_program_map(bachelor_programs)
