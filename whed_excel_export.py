@@ -9,7 +9,13 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
-from isced_f import classify_bachelors_cell, split_bachelor_programs, write_bachelor_program_map
+from isced_f import (
+    classify_bachelor_program,
+    classify_bachelors_cell,
+    clean_program_title,
+    split_bachelor_programs,
+    write_bachelor_program_map,
+)
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -26,6 +32,10 @@ SECTION_TITLES = [
 SECTION_SET = set(SECTION_TITLES)
 IAU_ID_RE = re.compile(r"IAU-\d+")
 MULTISPACE_RE = re.compile(r"\s+")
+PROGRAM_DURATION_PREFIX_RE = re.compile(
+    r"^\d[\d\s./+-]*(?:yr|yrs|year|years|sem|sems|semo|semester|semesters|month|months)\b",
+    re.IGNORECASE,
+)
 
 ALLOWED_EXACT_COUNTRIES = {
     "Austria",
@@ -157,6 +167,58 @@ OUTPUT_COLUMNS = [
     "Raw Text",
 ]
 
+PROGRAM_SOURCE_CHOICES = {"bachelors", "all-degree-fields"}
+
+UNIVERSITY_TABLE_COLUMNS = [
+    "university_key",
+    "iau_code",
+    "university_name",
+    "native_name",
+    "country",
+    "street",
+    "city",
+    "province",
+    "post_code",
+    "website",
+    "statistics_year",
+    "total_staff",
+    "total_student",
+    "institution_funding",
+    "history",
+    "academic_year",
+    "admission_requirements",
+    "admission_requirement_ids",
+    "admission_requirements_enriched",
+    "annual_tuition_cost",
+    "languages",
+    "accrediting_agency",
+    "student_body",
+    "permanent_url",
+    "student_statistics_year",
+    "staff_statistics_year",
+    "staff_full_time_total",
+    "staff_part_time_total",
+    "updated_on",
+    "whed_link",
+]
+
+PROGRAM_TABLE_COLUMNS = [
+    "program_key",
+    "program_name",
+    "isced_code",
+]
+
+UNIVERSITY_PROGRAM_TABLE_COLUMNS = [
+    "university_program_key",
+    "university_key",
+    "program_key",
+    "iau_code",
+    "university_name",
+    "program_name",
+    "isced_code",
+    "degree_types",
+]
+
 ADDRESS_FIELD_MAP = {
     "street": "Street",
     "city": "City",
@@ -188,6 +250,9 @@ DEFAULT_ENRICHMENT_FILE = "whed_enrichment.jsonl"
 DEFAULT_ADMISSION_REQUIREMENT_ID_FILE = ROOT_DIR / "References" / "Codes" / "admission_requirement_condition_ids.json"
 ADMISSION_REQUIREMENT_MAPPING_SHEET = "Admission Requirement IDs"
 INTERNAL_ADMISSION_REQUIREMENT_LABELS_KEY = "__admission_requirement_labels"
+INTERNAL_PROGRAM_ITEMS_KEY = "__program_items"
+INTERNAL_PROGRAM_SOURCE_KEY = "__program_source"
+INTERNAL_UNIVERSITY_KEY = "__university_key"
 GENERIC_REQUIREMENT_HINTS = (
     "certificate",
     "diploma",
@@ -1465,46 +1530,21 @@ def build_output_row(record: Dict[str, str], max_degree_field_count: int) -> Lis
     return row
 
 
-def autofit_worksheet(worksheet, column_names: List[str]) -> None:
-    width_overrides = {
-        "Whed Link": 42,
-        "University Name": 34,
-        "Native Name": 34,
-        "Street": 28,
-        "Website": 28,
-        "General Information": 40,
-        "Divisions": 40,
-        "Degrees": 40,
-        "ISCED-F": 18,
-        "Raw Text": 60,
-    }
+def resolve_enrichment_file(enrichment_file: Path | None, preferred_dir: Path) -> Path | None:
+    if enrichment_file is not None:
+        return Path(enrichment_file)
 
-    for index, column_name in enumerate(column_names, start=1):
-        letter = get_column_letter(index)
-        if column_name in width_overrides:
-            worksheet.column_dimensions[letter].width = width_overrides[column_name]
-            continue
-
-        max_length = len(column_name)
-        for cell in worksheet[letter][: min(worksheet.max_row, 200)]:
-            if cell.value is None:
-                continue
-            max_length = max(max_length, len(str(cell.value)))
-
-        worksheet.column_dimensions[letter].width = min(max(max_length + 2, 12), 60)
+    preferred_dir = Path(preferred_dir)
+    default_candidate = preferred_dir / DEFAULT_ENRICHMENT_FILE
+    return default_candidate if default_candidate.exists() else None
 
 
-def export_txt_directory_to_excel(
+def collect_txt_records(
     input_dir: Path,
-    output_file: Path,
     enrichment_file: Path | None = None,
-) -> int:
+    include_all_countries: bool = False,
+) -> tuple[List[Dict[str, str]], int, set[str], Dict[str, Dict[str, int]], Dict[tuple[str, str], int]]:
     input_dir = Path(input_dir)
-    output_file = Path(output_file)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    if enrichment_file is None:
-        default_candidate = output_file.parent / DEFAULT_ENRICHMENT_FILE
-        enrichment_file = default_candidate if default_candidate.exists() else None
     enrichment_records = load_enrichment_records(enrichment_file)
 
     txt_files = sorted(input_dir.glob("*.txt"), key=lambda item: item.name.casefold())
@@ -1514,8 +1554,9 @@ def export_txt_directory_to_excel(
 
     for txt_file in txt_files:
         record = parse_txt_file(txt_file)
-        if not is_allowed_country(record.get("Country", "")):
+        if not include_all_countries and not is_allowed_country(record.get("Country", "")):
             continue
+
         enrichment = enrichment_records.get(record.get("IAU Code", ""), {})
         record["Admission Requirements (Enriched)"] = first_non_empty(
             (
@@ -1534,6 +1575,308 @@ def export_txt_directory_to_excel(
         records.append(record)
 
     admission_requirement_id_maps, admission_requirement_usage_counts = assign_admission_requirement_ids(records)
+    return (
+        records,
+        max_degree_field_count,
+        bachelor_programs,
+        admission_requirement_id_maps,
+        admission_requirement_usage_counts,
+    )
+
+
+def normalize_program_source(program_source: str) -> str:
+    normalized = normalize_space(program_source or "bachelors").casefold()
+    if normalized not in PROGRAM_SOURCE_CHOICES:
+        allowed = ", ".join(sorted(PROGRAM_SOURCE_CHOICES))
+        raise ValueError(f"Unsupported program source '{program_source}'. Expected one of: {allowed}")
+    return normalized
+
+
+def is_noise_program_name(program_name: str) -> bool:
+    normalized = normalize_space(program_name)
+    if not normalized:
+        return True
+
+    lowered = normalized.casefold()
+    if len(normalized) <= 1:
+        return True
+
+    if normalized[:1].islower():
+        return True
+
+    if "complete a set of curricular units" in lowered:
+        return True
+
+    if PROGRAM_DURATION_PREFIX_RE.match(normalized):
+        return True
+
+    if normalized[:1].isdigit() and (
+        "%" in normalized
+        or "+" in normalized
+        or any(token in lowered for token in ("online", "programme", "program", "part-time", "full-time", " w/"))
+    ):
+        return True
+
+    meta_patterns = (
+        r"\bprogramme[s]?\b",
+        r"\bprogram[s]?\b",
+        r"\bcourse[s]?\b",
+        r"\boffered\b",
+        r"\bcollaboration\b",
+        r"\bpartnership\b",
+        r"\bpartner institution\b",
+        r"\bdual degree\b",
+        r"\bdual-degree\b",
+        r"\baccelerated\b",
+        r"\bpathway\b",
+        r"\bresidency\b",
+        r"\benrollment\b",
+        r"\benrolment\b",
+        r"\bsupplement\b",
+        r"\bpreparatory\b",
+        r"\bpostgraduate\b",
+        r"\bdoctoral\b",
+        r"\bpostdoctoral\b",
+        r"\bexecutive\b",
+        r"\bbachelor'?s degree\b",
+        r"\bmasters? degree\b",
+        r"\bpre-med\b",
+        r"\bpre professional\b",
+        r"\bpre-professional\b",
+        r"\bfree courses\b",
+        r"\bshort courses\b",
+        r"\blicensure\b",
+        r"\bhonors college\b",
+    )
+    if any(re.search(pattern, lowered) for pattern in meta_patterns):
+        return True
+
+    if re.search(r"\b(?:university|college|institute|seminary)\b", lowered):
+        return True
+
+    suffix_tokens = (" note", " lekarz", " magister", " mestre", " yrkesexamen", " lizentiat", " abschlusspr")
+    if any(token in lowered for token in suffix_tokens):
+        return True
+
+    return False
+
+
+def get_record_program_items(record: Dict[str, str], program_source: str = "bachelors") -> List[Dict[str, str]]:
+    normalized_source = normalize_program_source(program_source)
+    cached_source = record.get(INTERNAL_PROGRAM_SOURCE_KEY, "")
+    cached_items = record.get(INTERNAL_PROGRAM_ITEMS_KEY, [])
+    if cached_source == normalized_source and isinstance(cached_items, list):
+        return cached_items
+
+    items_by_key: Dict[str, Dict[str, object]] = {}
+
+    def add_program(raw_name: str, degree_type: str = "") -> None:
+        program_name = clean_program_title(raw_name)
+        if is_noise_program_name(program_name):
+            return
+
+        key = program_name.casefold()
+        program_item = items_by_key.setdefault(
+            key,
+            {
+                "program_name": program_name,
+                "isced_code": "",
+                "degree_types": set(),
+            },
+        )
+
+        isced_code = classify_bachelor_program(raw_name)
+        if isced_code and not program_item["isced_code"]:
+            program_item["isced_code"] = isced_code
+        if degree_type:
+            program_item["degree_types"].add(degree_type)
+
+    if normalized_source == "bachelors":
+        for raw_name in split_bachelor_programs(record.get("Bachelor's Degree", "")):
+            add_program(raw_name, "Bachelor's Degree")
+    else:
+        for entry in record.get(INTERNAL_DEGREE_FIELDS_KEY, []):
+            degree_type = normalize_space(entry.get("type", ""))
+            for raw_name in split_subject_items(entry.get("fields_of_study", "")):
+                add_program(raw_name, degree_type)
+
+        if not items_by_key:
+            for raw_name in split_bachelor_programs(record.get("Bachelor's Degree", "")):
+                add_program(raw_name, "Bachelor's Degree")
+
+    result: List[Dict[str, str]] = []
+    for item in sorted(items_by_key.values(), key=lambda value: str(value["program_name"]).casefold()):
+        degree_types = sorted((str(value) for value in item["degree_types"]), key=str.casefold)
+        result.append(
+            {
+                "program_name": str(item["program_name"]),
+                "isced_code": str(item["isced_code"]),
+                "degree_types": " | ".join(degree_types),
+            }
+        )
+
+    record[INTERNAL_PROGRAM_SOURCE_KEY] = normalized_source
+    record[INTERNAL_PROGRAM_ITEMS_KEY] = result
+    return result
+
+
+def build_university_table_rows(records: List[Dict[str, str]]) -> List[Dict[str, object]]:
+    rows: List[Dict[str, object]] = []
+
+    for university_key, record in enumerate(records, start=1):
+        record[INTERNAL_UNIVERSITY_KEY] = university_key
+        rows.append(
+            {
+                "university_key": university_key,
+                "iau_code": record.get("IAU Code", ""),
+                "university_name": record.get("University Name", ""),
+                "native_name": record.get("Native Name", ""),
+                "country": record.get("Country", ""),
+                "street": record.get("Street", ""),
+                "city": record.get("City", ""),
+                "province": record.get("Province", ""),
+                "post_code": record.get("Post Code", ""),
+                "website": record.get("Website", ""),
+                "statistics_year": record.get("Statistics Year", ""),
+                "total_staff": record.get("Total Staff", ""),
+                "total_student": record.get("Total Student", ""),
+                "institution_funding": record.get("Institution Funding", ""),
+                "history": record.get("History", ""),
+                "academic_year": record.get("Academic Year", ""),
+                "admission_requirements": record.get("Admission Requirements", ""),
+                "admission_requirement_ids": record.get("Admission Requirement IDs", ""),
+                "admission_requirements_enriched": record.get("Admission Requirements (Enriched)", ""),
+                "annual_tuition_cost": record.get("Annual Tuition / Cost", ""),
+                "languages": record.get("Language(s)", ""),
+                "accrediting_agency": record.get("Accrediting Agency", ""),
+                "student_body": record.get("Student Body", ""),
+                "permanent_url": record.get("Permanent URL", ""),
+                "student_statistics_year": record.get("Student Statistics Year", ""),
+                "staff_statistics_year": record.get("Staff Statistics Year", ""),
+                "staff_full_time_total": record.get("Staff Full Time Total", ""),
+                "staff_part_time_total": record.get("Staff Part Time Total", ""),
+                "updated_on": record.get("Updated On", ""),
+                "whed_link": record.get("Whed Link", ""),
+            }
+        )
+
+    return rows
+
+
+def build_program_table_rows(
+    records: List[Dict[str, str]],
+    program_source: str = "bachelors",
+) -> tuple[List[Dict[str, object]], Dict[str, Dict[str, object]]]:
+    normalized_source = normalize_program_source(program_source)
+    programs_by_name: Dict[str, Dict[str, object]] = {}
+
+    for record in records:
+        for item in get_record_program_items(record, normalized_source):
+            key = item["program_name"].casefold()
+            program_row = programs_by_name.setdefault(
+                key,
+                {
+                    "program_key": 0,
+                    "program_name": item["program_name"],
+                    "isced_code": item["isced_code"],
+                },
+            )
+            if item["isced_code"] and not program_row["isced_code"]:
+                program_row["isced_code"] = item["isced_code"]
+
+    rows: List[Dict[str, object]] = []
+    for program_key, program_row in enumerate(
+        sorted(programs_by_name.values(), key=lambda value: str(value["program_name"]).casefold()),
+        start=1,
+    ):
+        program_row["program_key"] = program_key
+        rows.append(dict(program_row))
+
+    return rows, programs_by_name
+
+
+def build_university_program_table_rows(
+    records: List[Dict[str, str]],
+    program_lookup: Dict[str, Dict[str, object]],
+    program_source: str = "bachelors",
+) -> List[Dict[str, object]]:
+    normalized_source = normalize_program_source(program_source)
+    rows: List[Dict[str, object]] = []
+
+    for university_program_key, record in enumerate(records, start=1):
+        record[INTERNAL_UNIVERSITY_KEY] = university_program_key
+
+    row_id = 1
+    for record in records:
+        university_key = int(record.get(INTERNAL_UNIVERSITY_KEY, 0) or 0)
+        for item in get_record_program_items(record, normalized_source):
+            program_row = program_lookup.get(item["program_name"].casefold())
+            if not program_row:
+                continue
+
+            rows.append(
+                {
+                    "university_program_key": row_id,
+                    "university_key": university_key,
+                    "program_key": program_row["program_key"],
+                    "iau_code": record.get("IAU Code", ""),
+                    "university_name": record.get("University Name", ""),
+                    "program_name": item["program_name"],
+                    "isced_code": item["isced_code"] or program_row.get("isced_code", ""),
+                    "degree_types": item["degree_types"],
+                }
+            )
+            row_id += 1
+
+    return rows
+
+
+def write_table_workbook(
+    output_file: Path,
+    sheet_name: str,
+    columns: List[str],
+    rows: List[Dict[str, object]],
+) -> int:
+    output_file = Path(output_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = sheet_name
+    sheet.append(columns)
+
+    header_font = Font(bold=True)
+    wrap_alignment = Alignment(vertical="top", wrap_text=True)
+
+    for cell in sheet[1]:
+        cell.font = header_font
+        cell.alignment = wrap_alignment
+
+    for row in rows:
+        sheet.append([row.get(column, "") for column in columns])
+
+    for row in sheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = wrap_alignment
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+    autofit_worksheet(sheet, columns)
+    workbook.save(output_file)
+    return max(sheet.max_row - 1, 0)
+
+
+def write_full_workbook(
+    records: List[Dict[str, str]],
+    output_file: Path,
+    max_degree_field_count: int,
+    bachelor_programs: Iterable[str],
+    admission_requirement_id_maps: Dict[str, Dict[str, int]],
+    admission_requirement_usage_counts: Dict[tuple[str, str], int],
+) -> int:
+    output_file = Path(output_file)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
     output_columns = build_output_columns(max_degree_field_count)
     workbook = Workbook()
     sheet = workbook.active
@@ -1561,8 +1904,184 @@ def export_txt_directory_to_excel(
         admission_requirement_id_maps,
         admission_requirement_usage_counts,
     )
-    # autofit_worksheet(sheet, output_columns)
     workbook.save(output_file)
     write_bachelor_program_map(bachelor_programs)
-
     return max(sheet.max_row - 1, 0)
+
+
+def write_relational_workbooks(
+    records: List[Dict[str, str]],
+    universities_output_file: Path,
+    programs_output_file: Path,
+    university_programs_output_file: Path,
+    program_source: str = "bachelors",
+) -> Dict[str, int]:
+    university_rows = build_university_table_rows(records)
+    program_rows, program_lookup = build_program_table_rows(records, program_source=program_source)
+    university_program_rows = build_university_program_table_rows(
+        records,
+        program_lookup,
+        program_source=program_source,
+    )
+
+    return {
+        "universities": write_table_workbook(
+            Path(universities_output_file),
+            "universities",
+            UNIVERSITY_TABLE_COLUMNS,
+            university_rows,
+        ),
+        "programs": write_table_workbook(
+            Path(programs_output_file),
+            "programs",
+            PROGRAM_TABLE_COLUMNS,
+            program_rows,
+        ),
+        "university_programs": write_table_workbook(
+            Path(university_programs_output_file),
+            "university_programs",
+            UNIVERSITY_PROGRAM_TABLE_COLUMNS,
+            university_program_rows,
+        ),
+    }
+
+
+def export_relational_tables_to_excel(
+    input_dir: Path,
+    universities_output_file: Path,
+    programs_output_file: Path,
+    university_programs_output_file: Path,
+    enrichment_file: Path | None = None,
+    include_all_countries: bool = False,
+    program_source: str = "bachelors",
+) -> Dict[str, int]:
+    reference_output = Path(universities_output_file)
+    resolved_enrichment_file = resolve_enrichment_file(enrichment_file, reference_output.parent)
+    (
+        records,
+        _max_degree_field_count,
+        _bachelor_programs,
+        _admission_requirement_id_maps,
+        _admission_requirement_usage_counts,
+    ) = collect_txt_records(
+        Path(input_dir),
+        enrichment_file=resolved_enrichment_file,
+        include_all_countries=include_all_countries,
+    )
+
+    counts = write_relational_workbooks(
+        records,
+        universities_output_file=Path(universities_output_file),
+        programs_output_file=Path(programs_output_file),
+        university_programs_output_file=Path(university_programs_output_file),
+        program_source=program_source,
+    )
+    return counts
+
+
+def export_txt_directory_outputs(
+    input_dir: Path,
+    output_file: Path | None = None,
+    universities_output_file: Path | None = None,
+    programs_output_file: Path | None = None,
+    university_programs_output_file: Path | None = None,
+    enrichment_file: Path | None = None,
+    include_all_countries: bool = False,
+    program_source: str = "bachelors",
+) -> Dict[str, int]:
+    preferred_dir = (
+        Path(output_file).parent
+        if output_file is not None
+        else Path(universities_output_file).parent
+        if universities_output_file is not None
+        else Path.cwd()
+    )
+    resolved_enrichment_file = resolve_enrichment_file(enrichment_file, preferred_dir)
+    (
+        records,
+        max_degree_field_count,
+        bachelor_programs,
+        admission_requirement_id_maps,
+        admission_requirement_usage_counts,
+    ) = collect_txt_records(
+        Path(input_dir),
+        enrichment_file=resolved_enrichment_file,
+        include_all_countries=include_all_countries,
+    )
+
+    results: Dict[str, int] = {}
+    if output_file is not None:
+        results["full_workbook"] = write_full_workbook(
+            records,
+            Path(output_file),
+            max_degree_field_count,
+            bachelor_programs,
+            admission_requirement_id_maps,
+            admission_requirement_usage_counts,
+        )
+
+    if (
+        universities_output_file is not None
+        and programs_output_file is not None
+        and university_programs_output_file is not None
+    ):
+        results.update(
+            write_relational_workbooks(
+                records,
+                universities_output_file=Path(universities_output_file),
+                programs_output_file=Path(programs_output_file),
+                university_programs_output_file=Path(university_programs_output_file),
+                program_source=program_source,
+            )
+        )
+
+    return results
+
+
+def autofit_worksheet(worksheet, column_names: List[str]) -> None:
+    width_overrides = {
+        "Whed Link": 42,
+        "University Name": 34,
+        "Native Name": 34,
+        "university_name": 34,
+        "program_name": 34,
+        "Street": 28,
+        "street": 28,
+        "Website": 28,
+        "website": 28,
+        "General Information": 40,
+        "Divisions": 40,
+        "Degrees": 40,
+        "ISCED-F": 18,
+        "degree_types": 24,
+        "Raw Text": 60,
+    }
+
+    for index, column_name in enumerate(column_names, start=1):
+        letter = get_column_letter(index)
+        if column_name in width_overrides:
+            worksheet.column_dimensions[letter].width = width_overrides[column_name]
+            continue
+
+        max_length = len(column_name)
+        for cell in worksheet[letter][: min(worksheet.max_row, 200)]:
+            if cell.value is None:
+                continue
+            max_length = max(max_length, len(str(cell.value)))
+
+        worksheet.column_dimensions[letter].width = min(max(max_length + 2, 12), 60)
+
+
+def export_txt_directory_to_excel(
+    input_dir: Path,
+    output_file: Path,
+    enrichment_file: Path | None = None,
+    include_all_countries: bool = False,
+) -> int:
+    results = export_txt_directory_outputs(
+        input_dir=Path(input_dir),
+        output_file=Path(output_file),
+        enrichment_file=enrichment_file,
+        include_all_countries=include_all_countries,
+    )
+    return results.get("full_workbook", 0)
