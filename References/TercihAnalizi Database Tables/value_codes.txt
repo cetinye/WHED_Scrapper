@@ -1,0 +1,77 @@
+"value_codes.V.name" => "Başarı",
+
+    "value_codes.V.caption" => "Zafer",
+
+    "value_codes.V.description" => "Bu çalışma değerini tatmin eden meslekler, sonuç odaklıdır ve çalışanların en güçlü yeteneklerini kullanmalarına izin verir, onlara bir başarı hissi verir. İlgili ihtiyaçlar Yetenek Kullanımı ve Başarıdır.",
+
+    "value_codes.V.list.0" => "en iyi yeteneklerinizi kullanın",
+
+    "value_codes.V.list.1" => "çabalarınızın sonuçlarını görün",
+
+    "value_codes.V.list.2" => "bir başarı hissi alın",
+
+
+
+    "value_codes.F.name" => "Bağımsızlık",
+
+    "value_codes.F.caption" => "Özgürlük",
+
+    "value_codes.F.description" => "Bu çalışma değerini tatmin eden meslekler, çalışanların kendi başlarına çalışmalarına ve kararlar almalarına izin verir. İlgili ihtiyaçlar Yaratıcılık, Sorumluluk ve Özerkliktir.",
+
+    "value_codes.F.list.0" => "kendi inisiyatifinizle şeyler yapabilme",
+
+    "value_codes.F.list.1" => "kendi başınıza kararlar alabilme",
+
+
+
+    "value_codes.O.name" => "Tanınma",
+
+    "value_codes.O.caption" => "Pozisyon",
+
+    "value_codes.O.description" => "Bu çalışma değerini tatmin eden meslekler ilerleme, liderlik potansiyeli sunar ve genellikle prestijli kabul edilir. İlgili ihtiyaçlar İlerleme, Otorite, Tanınma ve Sosyal Statüdür.",
+
+    "value_codes.O.list.0" => "ilerleme için iyi olanaklar",
+
+    "value_codes.O.list.1" => "prestij",
+
+    "value_codes.O.list.2" => "liderlik potansiyeli",
+
+
+
+    "value_codes.P.name" => "İlişkiler",
+
+    "value_codes.P.caption" => "İnsanlar",
+
+    "value_codes.P.description" => "Bu çalışma değerini tatmin eden meslekler, çalışanların başkalarına hizmet etmelerine ve iş arkadaşlarıyla dostane, rekabetsiz bir ortamda çalışmalarına izin verir. İlgili ihtiyaçlar İş Arkadaşları, Ahlaki Değerler ve Sosyal Hizmettir.",
+
+    "value_codes.P.list.0" => "iş arkadaşlarınızın dostane olması",
+
+    "value_codes.P.list.1" => "başkalarına hizmet edebilme",
+
+    "value_codes.P.list.2" => "doğru bildiğiniz şeylere karşı gelmek zorunda kalmama",
+
+
+
+    "value_codes.H.name" => "Destek",
+
+    "value_codes.H.caption" => "Yardımcı Olma",
+
+    "value_codes.H.description" => "Bu çalışma değerini tatmin eden meslekler, çalışanların arkasında duran destekleyici bir yönetim sunar. İlgili ihtiyaçlar Şirket Politikaları, İnsan İlişkileri Üzerine Denetim ve Teknik Üzerine Denetimdir.",
+
+    "value_codes.H.list.0" => "çalışanlarının arkasında durur",
+
+    "value_codes.H.list.1" => "çalışanların yönetim tarzından memnun olduğu",
+
+    "value_codes.H.list.2" => "yetkin, düşünceli ve adil bir yönetim ile tanınır",
+
+
+
+    "value_codes.W.name" => "Çalışma Koşulları",
+
+    "value_codes.W.caption" => "Konfor",
+
+    "value_codes.W.description" => "Bu çalışma değerini tatmin eden meslekler, iş güvencesi ve iyi çalışma koşulları sunar. İlgili ihtiyaçlar Aktivite, Tazminat, Bağımsızlık, Güvenlik, Çeşitlilik ve Çalışma Koşullarıdır.",
+
+    "value_codes.W.list.0" => "maaş, iş güvencesi ve iyi çalışma koşulları",
+
+    "value_codes.W.list.1" => "çalışma stilinize uygun işler. Bazı insanlar sürekli meşgul olmayı, yalnız çalışmayı veya yapacak çok farklı şeyler olmasını tercih eder",

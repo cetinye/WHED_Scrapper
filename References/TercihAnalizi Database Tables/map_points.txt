@@ -1,0 +1,27 @@
+"map_points" => [
+
+        "1" => " Sosyal Hizmetler",
+
+        "2" => "Yönetim ve Pazarlama",
+
+        "3" => "Yönetim ve Pazarlama",
+
+        "4" => "Ofis ve İş Alanları",
+
+        "5" => "Ofis ve İş Alanları",
+
+        "6" => "Teknik Alanlar",
+
+        "7" => "Teknik Alanlar",
+
+        "8" => "Bilim ve Teknoloji",
+
+        "9" => "Bilim ve Teknoloji",
+
+        "10" => "Sanat",
+
+        "11" => "Sanat",
+
+        "12" => "Sosyal Hizmetler",
+
+    ],

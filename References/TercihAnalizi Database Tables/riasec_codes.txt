@@ -1,0 +1,113 @@
+"riasec_codes.R.name" => "Realistik",
+
+    "riasec_codes.R.caption" => "Yapıcı",
+
+    "riasec_codes.R.description" => "Realistik bireyler, istenen sonuçlara, eylemlere ve başarılara dayalı olarak genellikle pratik, organize ve iradeli kişilerdir. Somut ve elle tutulur sonuçlara odaklanırlar ve görevlerini hızlı bir şekilde tamamlamaya motive olurlar.",
+
+    "riasec_codes.R.list.0" => "Realistik karakter tipine sahip bireyler doğal olarak teknik beceriler ve fiziksel güç geliştirmiş olabilir. Bu nedenle, inşaat, mühendislik, tarım, bilim, spor ve teknoloji gibi alanlarda çalışmaktan hoşlanırlar. Genellikle daha pratik ve gerçekçi yaklaşımları tercih eder ve düşüncelerini abartılı bir şekilde ifade etmezler.",
+
+    "riasec_codes.R.list.1" => "Realistik karakter tipine sahip bireyler kendilerini geliştirmekte kararlı olabilirler. Zamanlarını etkili bir şekilde kullanarak işlerini tamamlar ve hayatlarının her alanında istikrarlı bir şekilde çalışırlar. Bu bireyler başarılı olmak için doğru hedefleri belirleyebilir ve bunlara ulaşmak için gerekli adımları atmaya kararlıdırlar.",
+
+    "riasec_codes.R.list.2" => "Ancak, realistik karakter tipine sahip bireyler genellikle hayal güçlerinin sınırlarını zorlamaz ve mevcut durumun gerçekçi bir değerlendirmesine odaklanır, büyük düşünceler veya yenilikçi fikirlere odaklanmaktan ziyade. Bu nedenle, yaratıcı veya sanatsal aktivitelerle ilgilenmeyebilir ve rutin işlerde daha mutlu olabilirler.",
+
+
+
+    "riasec_codes.I.name" => "Araştırmacı",
+
+    "riasec_codes.I.caption" => "Düşünür",
+
+    "riasec_codes.I.description" => "Araştırmacı karakter tipi genellikle güçlü analitik ve entelektüel eğilimlere sahip, meraklı ve keşfetmeye hevesli bireyleri temsil eder. Bu bireyler, dünyayı anlama ve çözme tutkusuyla donatılmıştır ve sık sık bilim, teknoloji, matematik, tıp ve araştırma gibi alanlarda kendilerini geliştirmeye odaklanırlar.",
+
+    "riasec_codes.I.list.0" => "Bu karakter tipine sahip bireyler zihinsel uyarılmayı sever ve zorlu zihinsel problemleri çözme becerilerini geliştirmeye çalışırlar. Bu nedenle, genellikle soyut kavramlar ve teorilerle çalışırlar, bu da onlara dünya hakkında daha fazla bilgi edinme fırsatı verir.",
+
+    "riasec_codes.I.list.1" => "Araştırmacı karakter tipine sahip bireylerin diğer özellikleri arasında şunlar bulunabilir:",
+
+    "riasec_codes.I.list.2" => "Yüksek mantıksal ve sistematik düşünme becerileri.",
+
+    "riasec_codes.I.list.3" => "Yaratıcı ve yenilikçi fikirler üretebilme yeteneği.",
+
+    "riasec_codes.I.list.4" => "Bilgi toplama ve araştırma yapma becerileri gelişmiştir.",
+
+    "riasec_codes.I.list.5" => "Güçlü analitik yetenekler ve problem çözme becerileri.",
+
+    "riasec_codes.I.list.6" => "Bilim, teknoloji, matematik, tıp ve araştırma gibi alanlara ilgi.",
+
+    "riasec_codes.I.list.7" => "Dünya hakkında daha fazla öğrenme ve anlama arzusu.",
+
+    "riasec_codes.I.list.8" => "Düşünceleri ve projeleri üzerinde çalışmayı sosyal etkileşimlere tercih etme.",
+
+    "riasec_codes.I.list.9" => "Bu özelliklere sahip bireyler pek çok meslekte başarılı olabilirler. Örneğin, araştırmacılar, mühendisler, bilim insanları, matematikçiler, doktorlar, avukatlar, analistler ve yazılım geliştiriciler olarak kariyer yapabilirler.",
+
+
+
+    "riasec_codes.A.name" => "Yaratıcı",
+
+    "riasec_codes.A.caption" => "Sanatsal",
+
+    "riasec_codes.A.description" => "Yaratıcı kişilik tipi, yaratıcılık, estetik hassasiyet ve duygusal derinlik ile karakterize edilen bireylerden oluşur. Bu bireyler, dünyayı anlamak ve kendilerini sanatsal ifade yoluyla ifade etme ihtiyacı hissederler. Yaratıcı kişilik tipi genellikle sanat, müzik, edebiyat, tiyatro ve diğer yaratıcı alanlarla ilişkilendirilir.",
+
+    "riasec_codes.A.list.0" => "Yaratıcı Düşünme: Yaratıcı kişilik tipi, yüksek yaratıcılık ve hayal gücü ile kendini ifade eden bir kişiliği yansıtır. Bu bireyler, kendilerini ifade etmek ve yeni fikirler geliştirmek için yaratıcı düşünme becerilerini kullanırlar.",
+
+    "riasec_codes.A.list.1" => "Estetik Hassasiyet: Yaratıcı kişilik tipi ayrıca, güzellik ve estetiğe duyarlı bir kişiliği ifade eder. Bu bireyler, sanat eserleri, müzik ve diğer yaratıcı ifadelerle duygusal bir bağ kurar ve bunlardan ilham alırlar.",
+
+    "riasec_codes.A.list.2" => "Duygusal Derinlik: Yaratıcı kişilik tipi ayrıca, insanların duygusal dünyalarına derinlemesine dalma eğiliminde olan bir kişiliği ifade eder. Bu bireyler, duygularını ve deneyimlerini sanatsal ifadeler aracılığıyla dışa vurmayı tercih ederler.",
+
+    "riasec_codes.A.list.3" => "Yaratıcı Yönlendirme: Yaratıcı kişilik tipi ayrıca, yaratıcı bir yönlendirmeye ihtiyaç duyan bir kişiliği ifade eder. Bu bireyler, kendilerini sanatsal ifade yoluyla ifade ederken bir hedefe veya amaca yönlendirilmek isteyebilirler.",
+
+    "riasec_codes.A.list.4" => "Yaratıcı kişilik tipine sahip bireyler tipik olarak sanatsal mesleklerde başarılı olurlar. Örneğin, resim, müzik, yazı, oyunculuk, dans, tasarım ve diğer yaratıcı mesleklerde kendilerini geliştirebilirler. Ancak, yaratıcı kişilik tipine sahip bireyler iş dünyasında da başarılı olabilirler, çünkü yaratıcı düşünme becerileri onlara problem çözme ve yenilikçi fikirler geliştirmede yardımcı olabilir.",
+
+
+
+    "riasec_codes.S.name" => "Sosyal",
+
+    "riasec_codes.S.caption" => "Yardımsever",
+
+    "riasec_codes.S.description" => "Sosyal karakter tipi, diğer insanlarla etkileşim kurma ve sosyal normlara uyum sağlama yeteneğine atıfta bulunur. Bu karakter tipine sahip bireyler, etkili iletişim becerilerine, diğerlerinin ihtiyaçlarına saygı duyma ve sosyal beklentilere uyum sağlama gibi becerilere sahiptir. Ayrıca, sosyal karakter tipine sahip insanlar genellikle liderlik rollerinde başarılı olurlar, diğerlerini motive eder ve yönlendirirler.",
+
+    "riasec_codes.S.list.0" => "Empati: Sosyal karakter tipi, diğerlerinin duygularını ve ihtiyaçlarını anlama ve empati kurma yeteneğine atıfta bulunur. Bu bireyler, diğerlerinin duygusal durumlarını okuyabilir ve uygun şekilde yanıt verebilirler.",
+
+    "riasec_codes.S.list.1" => "İletişim Becerileri: Sosyal karakter tipi ayrıca, etkili bir şekilde iletişim kurma ve aktif olarak dinleme yeteneğini içerir. Bu bireyler, hem sözlü hem de yazılı olarak etkili bir şekilde iletişim kurabilir ve diğerlerini dinleyebilirler.",
+
+    "riasec_codes.S.list.2" => "Sosyal Uyum: Sosyal karakter tipi ayrıca, sosyal normlara uyum sağlama ve diğerleriyle uyum içinde yaşama yeteneğini kapsar. Bu bireyler, sosyal kurallara ve değerlere uyarak sosyal beklentilere uyum sağlarlar.",
+
+    "riasec_codes.S.list.3" => "Liderlik: Sosyal karakter tipine sahip insanlar genellikle diğerlerini motive edip yönlendirme konusunda başarılıdırlar. Liderlik rollerini üstlenip, diğerlerinin potansiyellerine ulaşmalarına yardımcı olabilir ve grupları hedeflerine ulaşmaları için yönlendirebilirler.",
+
+    "riasec_codes.S.list.4" => "Sosyal karakter tipine sahip bireyler genellikle insan kaynakları, müşteri hizmetleri, öğretmenlik, psikoloji, sosyal hizmet ve diğer insanlarla etkileşim içeren mesleklerde başarılı olurlar. Ancak, sosyal karakter tipine sahip bireyler herhangi bir meslekte başarılı olabilirler, çünkü iyi bir iletişimci olmak ve diğerleriyle iyi geçinmek her işte önemli becerilerdir.",
+
+
+
+    "riasec_codes.E.name" => "Girişimci",
+
+    "riasec_codes.E.caption" => "İkna Edici",
+
+    "riasec_codes.E.description" => "Girişimci kişilik tipi, bireylerin yeni fikirler geliştirme, risk alma ve yenilik yapma yeteneğine sahip olduğu bir özelliktir. Bu bireyler, yaratıcılık, kararlılık, özgüven ve liderlik gibi niteliklere sahip olabilirler. Girişimci kişilik tipi genellikle iş dünyası, pazarlama, finans ve girişimcilik gibi alanlarda başarılıdır.",
+
+    "riasec_codes.E.list.0" => "Yaratıcılık: Girişimci kişilik tipi, yaratıcılık ve yenilik konusunda yetenekli olmayı ifade eder. Bu bireyler, yeni fikirler geliştirmekte cesur olabilir ve alışılmadık düşünme biçimlerini benimseyebilirler.",
+
+    "riasec_codes.E.list.1" => "Kararlılık: Girişimci kişilik tipine sahip bireyler, hedeflerine ulaşma konusunda kararlılık gösterebilirler. Zorluklarla karşılaşsalar bile kolayca pes etmezler.",
+
+    "riasec_codes.E.list.2" => "Özgüven: Girişimci kişilik tipi, özgüvenli olmayı ve risk alma yeteneğini ifade eder. Bu bireyler, kendilerine güvenir ve risk almaktan korkmazlar.",
+
+    "riasec_codes.E.list.3" => "Liderlik: Girişimci kişilik tipine sahip bireyler, liderlik ve yönetim rollerinde başarılı olabilirler. Vizyonlarını ve hedeflerini başkalarına iletebilir ve bir grup insanı yönetebilirler.",
+
+    "riasec_codes.E.list.4" => "Girişimci kişilik tipine sahip bireyler, yenilikçi fikirler geliştirme, yeni işler başlatma veya mevcut işletmeleri genişletme gibi alanlarda başarılı olabilirler. Ancak, girişimci kişilik tipi yalnızca iş dünyasıyla sınırlı değildir. Bu özelliklere sahip bireyler, çeşitli alanlarda yenilik yapabilir ve yeni fikirlerle katkıda bulunabilirler.",
+
+
+
+    "riasec_codes.C.name" => "Düzenli",
+
+    "riasec_codes.C.caption" => "Organizatör",
+
+    "riasec_codes.C.description" => "Düzenli karakter tipi, toplum tarafından belirlenen norm ve değerlere uygun davranış sergileyen bir kişilik özelliğini yansıtır. Bu bireyler genellikle sosyal normlara uyarak, toplum tarafından genel olarak kabul gören davranışları sergilemeyi tercih ederler.",
+
+    "riasec_codes.C.list.0" => "Kural Takibi: Düzenli karakter tipine sahip bireyler, toplum tarafından kabul edilen kuralları takip etmeyi önceliklendirir. Bu kurallar, toplumun norm ve değerlerini yansıtır ve genellikle ahlaki ve etik değerleri içerir.",
+
+    "riasec_codes.C.list.1" => "Otoriteye Saygı: Bu bireyler, aile büyükleri, öğretmenler, işverenler, hükümet yetkilileri veya kurumları gibi otorite figürlerine saygı göstermeyi önemserler.",
+
+    "riasec_codes.C.list.2" => "Geleneksel Cinsiyet Rolleri: Düzenli karakter tipine sahip bireyler, toplumun erkek ve kadınlar için belirlediği roller ve beklentilere uygun davranmayı önemserler.",
+
+    "riasec_codes.C.list.3" => "Değişime Direnç: Bu bireyler, değişimin sosyal yapılar ve davranışlarda dengesizliklere neden olabileceğine inanabilirler ve bu yüzden değişime karşı dirençli olabilirler.",
+
+    "riasec_codes.C.list.4" => "Sosyal Statüye Önem Verme: Düzenli karakter tipine sahip bireyler, toplumdaki konumları ve saygınlıklarını yansıtan sosyal statüye önem verirler.",
+
+    "riasec_codes.C.list.5" => "Düzenli karakter tipine sahip bireyler, toplumun değerlerine ve normlarına uygun davranışlar sergilemek için çaba gösterirler. Ayrıca, diğerlerinin de bu norm ve değerlere uygun davranmasını önemserler, böylece toplumun düzenli işleyişini sürdürebilirler.",
