@@ -417,6 +417,7 @@ def write_country_payloads(
     for country_id in sorted(grouped_records):
         payload = {
             "country_id": country_id,
+            "locale": "en",
             "university_details": ensure_codes(grouped_records[country_id], country_id=country_id),
         }
         all_countries.append(payload)
@@ -458,6 +459,7 @@ def write_partition_payloads(
         universities = ensure_codes(grouped_records[partition_name], country_id=country_id)
         payload = {
             "country_id": country_id,
+            "locale": "en",
             "university_details": universities,
         }
         file_name = f"{file_prefix}-{slugify_identifier(partition_name)}.json"
