@@ -23,7 +23,12 @@ PRESERVE_PATHS = {
     ("data", "general_information", "country"),
     ("data", "divisions", "division_name"),
     ("data", "divisions", "more_details"),
+    ("data", "degree_fields", "degree_field_type"),
     ("data", "degree_fields", "degree_field_title"),
+    ("data", "degree_fields", "degree_field_subjects"),
+    ("data", "classification_information", "bachelors_degree"),
+    ("data", "classification_information", "masters_degree"),
+    ("data", "classification_information", "doctors_degree"),
     ("data", "location_information", "street"),
     ("data", "location_information", "city"),
     ("data", "location_information", "province"),
@@ -83,8 +88,28 @@ NO_TRANSLATE_REPORT_ITEMS = [
         "Often contains campus names, person names, abbreviations, or location notes; kept as-is.",
     ),
     (
+        "data.degree_fields.degree_field_type",
+        "Degree category label kept original to match the source taxonomy.",
+    ),
+    (
         "data.degree_fields.degree_field_title",
         "Formal degree title from source data; preserved to avoid mistranslating official award names.",
+    ),
+    (
+        "data.degree_fields.degree_field_subjects",
+        "Program / subject list for each degree block; kept original on request.",
+    ),
+    (
+        "data.classification_information.bachelors_degree",
+        "Bachelor's program list; kept original on request.",
+    ),
+    (
+        "data.classification_information.masters_degree",
+        "Master's program list; kept original on request.",
+    ),
+    (
+        "data.classification_information.doctors_degree",
+        "Doctoral program list; kept original on request.",
     ),
     (
         "data.location_information.street",
@@ -519,7 +544,12 @@ def collect_no_translate_samples(output_dir: Path) -> dict[str, list[str]]:
         "data.general_information.country": [],
         "data.divisions.division_name": [],
         "data.divisions.more_details": [],
+        "data.degree_fields.degree_field_type": [],
         "data.degree_fields.degree_field_title": [],
+        "data.degree_fields.degree_field_subjects": [],
+        "data.classification_information.bachelors_degree": [],
+        "data.classification_information.masters_degree": [],
+        "data.classification_information.doctors_degree": [],
         "data.location_information.street": [],
         "data.location_information.city": [],
         "data.location_information.province": [],
@@ -576,7 +606,14 @@ def collect_no_translate_samples(output_dir: Path) -> dict[str, list[str]]:
                 add("data.divisions.more_details", division.get("more_details"))
 
             for degree_field in data.get("degree_fields", []):
+                add("data.degree_fields.degree_field_type", degree_field.get("degree_field_type"))
                 add("data.degree_fields.degree_field_title", degree_field.get("degree_field_title"))
+                add("data.degree_fields.degree_field_subjects", degree_field.get("degree_field_subjects"))
+
+            classification = data.get("classification_information", {})
+            add("data.classification_information.bachelors_degree", classification.get("bachelors_degree"))
+            add("data.classification_information.masters_degree", classification.get("masters_degree"))
+            add("data.classification_information.doctors_degree", classification.get("doctors_degree"))
 
             add("data.location_information.street", location.get("street"))
             add("data.location_information.city", location.get("city"))
