@@ -225,6 +225,7 @@ KNOWN_LANGUAGES = {
     "danish",
     "dutch",
     "english",
+    "estonian",
     "filipino",
     "finnish",
     "french",
@@ -242,7 +243,9 @@ KNOWN_LANGUAGES = {
     "korean",
     "kurdish",
     "latin",
+    "lithuanian",
     "malay",
+    "maltese",
     "mongolian",
     "norwegian",
     "persian",
@@ -252,6 +255,8 @@ KNOWN_LANGUAGES = {
     "romanian",
     "russian",
     "sanskrit",
+    "serbocroatian",
+    "slovenian",
     "spanish",
     "swahili",
     "swedish",
@@ -295,6 +300,25 @@ REGIONAL_STUDIES = {
     "latin american studies",
     "middle eastern studies",
     "regional studies",
+}
+
+RAW_TITLE_EXACT_OVERRIDES = {
+    "A Master’s degree ¨Programme in Exercise Science is to be launched in the summer of 2024": "1014",
+    "child health": "0919",
+    "Conservatory Programmes": "0215",
+    "Dual Bachelor's degree in Engineering offered with Washington University": "0710",
+    "Educator Preparation Institute": "0111",
+    "English Training Supplement": "0231",
+    "European Master in System Dynamics": "0541",
+    "Language Programmes": "0231",
+    "Pre-Med": "0912",
+    "Safety Engineering Magistr": "1022",
+    "Some Programmes are taught in English": "0231",
+    "some Programmes offered in English Language": "0231",
+    "Teaching Licensure": "0111",
+    "Top-up programme for Indian and Pakistan Nurses": "0913",
+    "Viticulture Mestre": "0812",
+    "with with the McKelvey School of Engineering at Washington University": "0710",
 }
 
 RAW_EXACT_OVERRIDES = {
@@ -382,7 +406,9 @@ RAW_EXACT_OVERRIDES = {
     "Jazz and Popular Music": "0215",
     "Jewellery Art": "0214",
     "Justice Administration": "1032",
+    "Juilliard": "0215",
     "Kinesiology": "1014",
+    "KU Leuven": "0000",
     "Koran": "0221",
     "Labour and Industrial Relations": "0417",
     "Laboratory Techniques": "0711",
@@ -391,6 +417,7 @@ RAW_EXACT_OVERRIDES = {
     "Linguistics": "0232",
     "Logistics Management": "0413",
     "Maintenance Technology": "0719",
+    "Mesterfokozat": "0000",
     "Materials Engineering": "0722",
     "Measurement and Precision Engineering": "0715",
     "Meat and Poultry": "0721",
@@ -421,6 +448,7 @@ RAW_EXACT_OVERRIDES = {
     "Plant Pathology": "0811",
     "Political Sciences": "0312",
     "Podiatry": "0912",
+    "Portuguese Language and Culture Studies for foreigners": "0231",
     "Prehistory": "0222",
     "Preschool": "0112",
     "Preschool Education": "0112",
@@ -458,6 +486,7 @@ RAW_EXACT_OVERRIDES = {
     "Speech Studies": "0232",
     "Speech Therapy and Audiology": "0915",
     "Staff Development": "0417",
+    "STEM": "0588",
     "Sustainable Development": "0521",
     "Systems Analysis": "0613",
     "Taxation": "0411",
@@ -537,14 +566,14 @@ PATTERN_RULES: Sequence[Tuple[re.Pattern[str], str]] = (
     (re.compile(r"\b(mining|petroleum|oil and gas|geological engineering|quarry)\b"), "0724"),
     (re.compile(r"\b(architecture|architectural|town planning|regional planning|rural planning|urban design|landscape architecture)\b"), "0731"),
     (re.compile(r"\b(civil engineering|construction|structural|surveying|mapping|building|road|bridge|sanitation|engineering drawing)\b"), "0732"),
-    (re.compile(r"\b(agricultur|agronomy|crop|animal husbandry|animal science|farm|soil science|plant and crop protection|plant protection|apiculture|agrobiology|irrigation|harvest technology|tropical agriculture)\b"), "0811"),
+    (re.compile(r"\b(agricultur(?:e|al)?|agronomy|crop|animal husbandry|animal science|farm|soil science|plant and crop protection|plant protection|apiculture|agrobiology|irrigation|harvest technology|tropical agriculture)\b"), "0811"),
     (re.compile(r"\b(horticulture|gardening|floriculture|landscape gardening|nursery)\b"), "0812"),
     (re.compile(r"\b(forestry|logging|forest products)\b"), "0821"),
     (re.compile(r"\b(fishery|fisheries|aquaculture|mariculture)\b"), "0831"),
     (re.compile(r"\b(veterinary|animal health)\b"), "0841"),
     (re.compile(r"\b(dentistry|dental|orthodontics|oral surgery|periodontics|oral pathology)\b"), "0911"),
-    (re.compile(r"\b(medicine|medical science|anaesthes|surgery|orthopaed|psychiat|dermatology|gynaecology|neurology|paediatrics|forensic medicine|epidemiology|biomedicine|otorhinolaryngology|internal medicine|oncology|urology|nephrology|endocrinology|gastroenterology|rheumatology|pneumology|diabetology|hepatology|venereology|medical parasitology|public health|community health|podiatry)\b"), "0912"),
-    (re.compile(r"\b(nursing|midwifery|elder care|gerontology)\b"), "0913"),
+    (re.compile(r"\b(medicine|medical science|anaesthes|surgery|orthopaed|psychiat|dermatology|gynaecology|neurology|paediatrics|forensic medicine|epidemiology|biomedicine|otorhinolaryngology|internal medicine|oncology|urology|nephrology|endocrinology|gastroenterology|rheumatology|pneumology|diabetology|hepatology|venereology|medical parasitology|public health|community health|podiatry|pre[- ]?med)\b"), "0912"),
+    (re.compile(r"\b(nursing|nurses?|midwifery|elder care|gerontology)\b"), "0913"),
     (re.compile(r"\b(radiology|radiography|medical laboratory|diagnostic|audiology|prosthetic|optometry|ambulance|medical auxiliaries|prosthetics and orthotics|treatment techniques)\b"), "0914"),
     (re.compile(r"\b(therapy|rehabilitation|physio|physical therapy|occupational therapy|speech pathology|speech therapy|dietetics|nutrition|massage|mental health|art therapy|respiratory therapy|ergotherapy)\b"), "0915"),
     (re.compile(r"\b(pharmacy|pharmacology)\b"), "0916"),
@@ -619,7 +648,15 @@ def _truncate_degree_noise(text: str) -> str:
         " diploma ",
         " diplome ",
         " diplom ",
+        " diplom-ingenieur",
         " licenc",
+        " lizentiat",
+        " yrkesexamen",
+        " kirchliche",
+        " kunstlerische",
+        " lekarz",
+        " mestre",
+        " magistr",
         " swiadectwo",
     )
     positions = [lowered.find(marker) for marker in markers if lowered.find(marker) > 0]
@@ -637,6 +674,7 @@ def clean_program_title(raw_title: str) -> str:
     title = re.sub(r"^bachelor of\s+", "", title, flags=re.IGNORECASE)
     title = re.sub(r"^bachelor\s+", "", title, flags=re.IGNORECASE)
     title = _truncate_degree_noise(title)
+    title = re.sub(r"\bnote\b.*$", "", title, flags=re.IGNORECASE)
     title = title.replace("&", " and ")
     title = re.sub(r"[()]", " ", title)
     title = normalize_space(title).strip(" ,;:-/")
@@ -656,6 +694,14 @@ def _token_lookup_key(value: str) -> str:
     normalized = _normalize_lookup_key(value)
     tokens = [token for token in re.split(r"[\s+-]+", normalized) if token and token not in STOP_WORDS]
     return " ".join(tokens)
+
+
+def _raw_title_lookup_key(value: str) -> str:
+    normalized = _ascii_fold(normalize_space(value)).casefold()
+    normalized = normalized.replace("&", " and ")
+    normalized = normalized.replace("/", " ")
+    normalized = re.sub(r"[^\w\s+-]", " ", normalized)
+    return normalize_space(normalized)
 
 
 @lru_cache(maxsize=1)
@@ -698,7 +744,19 @@ def _build_exact_overrides() -> Dict[str, str]:
     return result
 
 
+@lru_cache(maxsize=1)
+def _build_raw_title_exact_overrides() -> Dict[str, str]:
+    return {
+        _raw_title_lookup_key(title): code
+        for title, code in RAW_TITLE_EXACT_OVERRIDES.items()
+    }
+
+
 def classify_bachelor_program(raw_title: str) -> str:
+    raw_override = _build_raw_title_exact_overrides().get(_raw_title_lookup_key(raw_title))
+    if raw_override:
+        return raw_override
+
     cleaned = clean_program_title(raw_title)
     if not cleaned:
         return ""
@@ -751,7 +809,7 @@ def classify_bachelor_program(raw_title: str) -> str:
     if normalized.endswith(" science") or normalized.endswith(" sciences"):
         return "0500"
 
-    return ""
+    return "0000"
 
 
 def classify_bachelors_cell(value: str) -> str:

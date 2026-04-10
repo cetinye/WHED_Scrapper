@@ -110,6 +110,44 @@ def generate_program_provider_id(country_id: object, program_name: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, name_seed))
 
 
+def ensure_provider_id_collisions_absent(
+    programs_by_scope: dict[object, list[dict[str, object]]],
+    *,
+    scope_label: str,
+) -> None:
+    owner_by_provider_id: dict[str, tuple[str, str]] = {}
+    duplicate_details: list[str] = []
+
+    for scope_name, programs in programs_by_scope.items():
+        normalized_scope_name = str(scope_name).strip()
+        for program in programs:
+            provider_id = str(program.get("provider_id") or "").strip()
+            if not provider_id:
+                continue
+
+            owner = (normalized_scope_name, str(program.get("name") or "").strip())
+            previous_owner = owner_by_provider_id.get(provider_id)
+            if previous_owner is None:
+                owner_by_provider_id[provider_id] = owner
+                continue
+
+            if previous_owner == owner:
+                continue
+
+            duplicate_details.append(
+                f"{provider_id} ({previous_owner[0]} / {previous_owner[1]} -> {owner[0]} / {owner[1]})"
+            )
+            if len(duplicate_details) >= 10:
+                break
+
+        if len(duplicate_details) >= 10:
+            break
+
+    if duplicate_details:
+        duplicates_text = "; ".join(duplicate_details)
+        raise ValueError(f"{scope_label} provider_id collision detected: {duplicates_text}")
+
+
 LANGUAGE_CODE_BY_NAME = {
     "Arabic": "ar",
     "Basque": "eu",
@@ -504,6 +542,10 @@ def build_programs(
     for country_id in programs_by_country:
         programs_by_country[country_id].sort(key=lambda item: (normalize_text(item["name"]), item["name"]))
 
+    ensure_provider_id_collisions_absent(
+        programs_by_scope=programs_by_country,
+        scope_label="country program",
+    )
     stats["program_unique_rows"] = len(aggregates)
     return programs_by_country, provider_id_by_program_key, stats
 
